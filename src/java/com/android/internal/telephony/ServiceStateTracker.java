@@ -4113,7 +4113,7 @@ public class ServiceStateTracker extends Handler {
      * @return true if the signal strength changed and a notification was sent.
      */
     protected boolean onSignalStrengthResult(AsyncResult ar) {
-        boolean isGsm = mPhone.isPhoneTypeGsm();
+        boolean isGsm = false;
         int dataRat = mSS.getRilDataRadioTechnology();
         int voiceRat = mSS.getRilVoiceRadioTechnology();
 
