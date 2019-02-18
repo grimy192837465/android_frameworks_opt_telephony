@@ -20,6 +20,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.res.Resources;
 import android.os.Message;
+import android.os.SystemProperties;
 import android.provider.Telephony.Sms.Intents;
 import android.telephony.SmsCbMessage;
 
@@ -32,6 +33,7 @@ import com.android.internal.telephony.SmsConstants;
 import com.android.internal.telephony.SmsMessageBase;
 import com.android.internal.telephony.SmsStorageMonitor;
 import com.android.internal.telephony.TelephonyComponentFactory;
+import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.telephony.WspTypeDecoder;
 import com.android.internal.telephony.cdma.sms.SmsEnvelope;
 import com.android.internal.util.HexDump;
@@ -153,6 +155,10 @@ public class CdmaInboundSmsHandler extends InboundSmsHandler {
                 // handled below, after storage check
                 break;
 
+            case SmsEnvelope.TELESERVICE_CT_WAP:
+                // handled below, after TELESERVICE_WAP
+                break;
+
             default:
                 loge("unsupported teleservice 0x" + Integer.toHexString(teleService));
                 return Intents.RESULT_SMS_UNSUPPORTED;
@@ -167,6 +173,15 @@ public class CdmaInboundSmsHandler extends InboundSmsHandler {
         }
 
         if (SmsEnvelope.TELESERVICE_WAP == teleService) {
+            return processCdmaWapPdu(sms.getUserData(), sms.mMessageRef,
+                    sms.getOriginatingAddress(), sms.getDisplayOriginatingAddress(),
+                    sms.getTimestampMillis());
+        } else if (SmsEnvelope.TELESERVICE_CT_WAP == teleService) {
+            /* China Telecom WDP header contains Message identifier
+               and User data subparametrs extract these fields */
+            if (!sms.processCdmaCTWdpHeader(sms)) {
+                return Intents.RESULT_SMS_HANDLED;
+            }
             return processCdmaWapPdu(sms.getUserData(), sms.mMessageRef,
                     sms.getOriginatingAddress(), sms.getDisplayOriginatingAddress(),
                     sms.getTimestampMillis());

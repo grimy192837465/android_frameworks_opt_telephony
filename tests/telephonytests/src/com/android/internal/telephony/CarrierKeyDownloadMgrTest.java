@@ -45,7 +45,6 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 
 import static android.preference.PreferenceManager.getDefaultSharedPreferences;
-
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -125,7 +124,7 @@ public class CarrierKeyDownloadMgrTest extends TelephonyTest {
 
     /**
      * Checks if the expiration date is calculated correctly
-     * In this case the expiration date should be within the window (7 to 21 days).
+     * In this case the expiration date should be the expiration date of the key.
      **/
     @Test
     @SmallTest
@@ -134,20 +133,16 @@ public class CarrierKeyDownloadMgrTest extends TelephonyTest {
         mCarrierKeyDM.mKeyAvailability = 3;
         SimpleDateFormat dt = new SimpleDateFormat("yyyy-mm-dd");
         Calendar cal = new GregorianCalendar();
-        cal.add(Calendar.DATE, 30);
+        cal.add(Calendar.DATE, 10);
         Date date = cal.getTime();
-        Calendar minExpirationCal = new GregorianCalendar();
-        Calendar maxExpirationCal = new GregorianCalendar();
-        minExpirationCal.add(Calendar.DATE, 23);
-        maxExpirationCal.add(Calendar.DATE, 9);
-        Date minExpirationDate = minExpirationCal.getTime();
-        Date maxExpirationDate = maxExpirationCal.getTime();
+        Calendar expectedCal = new GregorianCalendar();
+        expectedCal.add(Calendar.DATE, 3);
+        String dateExpected = dt.format(expectedCal.getTime());
         ImsiEncryptionInfo imsiEncryptionInfo = new ImsiEncryptionInfo("mcc", "mnc", 1,
                 "keyIdentifier", publicKey, date);
         when(mPhone.getCarrierInfoForImsiEncryption(anyInt())).thenReturn(imsiEncryptionInfo);
         Date expirationDate = new Date(mCarrierKeyDM.getExpirationDate());
-        assertTrue(expirationDate.before(minExpirationDate));
-        assertTrue(expirationDate.after(maxExpirationDate));
+        assertTrue(dt.format(expirationDate).equals(dateExpected));
     }
 
     /**

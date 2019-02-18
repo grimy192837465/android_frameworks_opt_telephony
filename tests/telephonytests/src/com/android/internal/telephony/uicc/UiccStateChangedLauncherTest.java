@@ -100,9 +100,10 @@ public class UiccStateChangedLauncherTest extends TelephonyTest {
         msg.what = integerArgumentCaptor.getValue();
 
         // The first broadcast should be sent after initialization.
-        UiccCard card = new UiccCard(mContext, mSimulatedCommands,
-                makeCardStatus(CardState.CARDSTATE_PRESENT), 0 /* phoneId */, new Object());
-        when(UiccController.getInstance().getUiccCardForPhone(0)).thenReturn(card);
+        UiccCard[] cards = new UiccCard[CARD_COUNT];
+        cards[0] = new UiccCard(mContext, mSimulatedCommands,
+                makeCardStatus(CardState.CARDSTATE_PRESENT), 0 /* phoneId */);
+        when(UiccController.getInstance().getUiccCards()).thenReturn(cards);
         uiccLauncher.handleMessage(msg);
 
         ArgumentCaptor<Intent> intentArgumentCaptor = ArgumentCaptor.forClass(Intent.class);
@@ -115,8 +116,9 @@ public class UiccStateChangedLauncherTest extends TelephonyTest {
                 intentArgumentCaptor.getValue().getAction());
 
         // Card state's changed to restricted. Broadcast should be sent.
-        card.update(mContext, mSimulatedCommands,
+        cards[0].update(mContext, mSimulatedCommands,
                 makeCardStatus(CardState.CARDSTATE_RESTRICTED));
+        when(UiccController.getInstance().getUiccCards()).thenReturn(cards);
         uiccLauncher.handleMessage(msg);
 
         broadcast_count++;
@@ -130,8 +132,9 @@ public class UiccStateChangedLauncherTest extends TelephonyTest {
         verify(mContext, times(broadcast_count)).sendBroadcast(any(Intent.class));
 
         // Card state's changed from restricted. Broadcast should be sent.
-        card.update(mContext, mSimulatedCommands,
+        cards[0].update(mContext, mSimulatedCommands,
                 makeCardStatus(CardState.CARDSTATE_PRESENT));
+        when(UiccController.getInstance().getUiccCards()).thenReturn(cards);
         uiccLauncher.handleMessage(msg);
 
         broadcast_count++;

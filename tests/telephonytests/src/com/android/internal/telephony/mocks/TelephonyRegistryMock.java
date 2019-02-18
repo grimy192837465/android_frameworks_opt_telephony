@@ -23,14 +23,12 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.telephony.CellInfo;
-import android.telephony.PhysicalChannelConfig;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.SubscriptionManager;
 import android.telephony.VoLteServiceState;
-
-import com.android.internal.telephony.IOnSubscriptionsChangedListener;
 import com.android.internal.telephony.IPhoneStateListener;
+import com.android.internal.telephony.IOnSubscriptionsChangedListener;
 import com.android.internal.telephony.ITelephonyRegistry;
 
 import java.util.ArrayList;
@@ -278,17 +276,6 @@ public class TelephonyRegistryMock extends ITelephonyRegistry.Stub {
     }
 
     @Override
-    public void notifyPhysicalChannelConfiguration(List<PhysicalChannelConfig> configs) {
-        throw new RuntimeException("Not implemented");
-    }
-
-    @Override
-    public void notifyPhysicalChannelConfigurationForSubscriber(int subId,
-            List<PhysicalChannelConfig> configs) {
-        throw new RuntimeException("Not implemented");
-    }
-
-    @Override
     public void notifyPreciseCallState(int ringingCallState, int foregroundCallState,
             int backgroundCallState) {
         throw new RuntimeException("Not implemented");
@@ -328,11 +315,6 @@ public class TelephonyRegistryMock extends ITelephonyRegistry.Stub {
     @Override
     public void notifySimActivationStateChangedForPhoneId(int phoneId, int subId,
                                                           int activationType, int state) {
-        throw new RuntimeException("Not implemented");
-    }
-
-    @Override
-    public void notifyUserMobileDataStateChangedForPhoneId(int phoneId, int subId, boolean state) {
         throw new RuntimeException("Not implemented");
     }
 }

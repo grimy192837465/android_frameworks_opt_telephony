@@ -150,15 +150,6 @@ class CallSetupParams extends CommandParams {
     }
 }
 
-class LanguageParams extends CommandParams {
-    String mLanguage;
-
-    LanguageParams(CommandDetails cmdDet, String lang) {
-        super(cmdDet);
-        mLanguage = lang;
-    }
-}
-
 class SelectItemParams extends CommandParams {
     Menu mMenu = null;
     boolean mLoadTitleIcon = false;
@@ -233,3 +224,13 @@ class BIPClientParams extends CommandParams {
         return false;
     }
 }
+class ActivateParams extends CommandParams {
+    int mActivateTarget;
+
+
+    ActivateParams(CommandDetails cmdDet, int target) {
+        super(cmdDet);
+        mActivateTarget = target;
+    }
+}
+

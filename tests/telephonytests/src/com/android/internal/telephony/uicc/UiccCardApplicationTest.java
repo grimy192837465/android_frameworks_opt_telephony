@@ -14,21 +14,8 @@
  * limitations under the License.
  */
 package com.android.internal.telephony.uicc;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.verify;
-
 import android.os.AsyncResult;
-import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.Message;
-import android.test.suitebuilder.annotation.SmallTest;
 
 import com.android.internal.telephony.CommandException;
 import com.android.internal.telephony.TelephonyTest;
@@ -36,15 +23,26 @@ import com.android.internal.telephony.test.SimulatedCommands;
 
 import org.junit.After;
 import org.junit.Before;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.eq;
 import org.junit.Test;
 import org.mockito.Mock;
+import android.test.suitebuilder.annotation.SmallTest;
+import android.os.Handler;
+import android.os.Message;
 
 public class UiccCardApplicationTest extends TelephonyTest {
     private UiccCardApplication mUiccCardApplication;
     @Mock
     private IccCardApplicationStatus mUiccCardAppStatus;
     @Mock
-    private UiccProfile mUiccProfile;
+    private UiccCard mUiccCard;
     private Handler mHandler;
     private UiccCardAppTestHandlerThread mTestHandlerThread;
     private int mAttemptsRemaining = -1;
@@ -61,7 +59,7 @@ public class UiccCardApplicationTest extends TelephonyTest {
         }
         @Override
         public void onLooperPrepared() {
-            mUiccCardApplication = new UiccCardApplication(mUiccProfile, mUiccCardAppStatus,
+            mUiccCardApplication = new UiccCardApplication(mUiccCard, mUiccCardAppStatus,
                     mContext, mSimulatedCommands);
             mHandler = new Handler(mTestHandlerThread.getLooper()) {
                 @Override
@@ -162,6 +160,28 @@ public class UiccCardApplicationTest extends TelephonyTest {
                 mFDNenabled);
         waitUntilReady();
         assertTrue(mUiccCardApplication.getIccFdnEnabled());
+    }
+
+    @Test
+    @SmallTest
+    public void testCheckIsPersoLocked() {
+        mUiccCardAppStatus.app_state = IccCardApplicationStatus.AppState
+               .APPSTATE_SUBSCRIPTION_PERSO;
+        mUiccCardAppStatus.perso_substate = IccCardApplicationStatus.PersoSubState
+                .PERSOSUBSTATE_SIM_NETWORK;
+        Message mCardAppUpdate = mHandler.obtainMessage(UICCCARDAPP_UPDATE_EVENT);
+        setReady(false);
+        mCardAppUpdate.sendToTarget();
+        waitUntilReady();
+        assertTrue(mUiccCardApplication.isPersoLocked());
+
+        mUiccCardAppStatus.perso_substate = IccCardApplicationStatus.PersoSubState
+                .PERSOSUBSTATE_READY;
+        setReady(false);
+        mCardAppUpdate = mHandler.obtainMessage(UICCCARDAPP_UPDATE_EVENT);
+        mCardAppUpdate.sendToTarget();
+        waitUntilReady();
+        assertFalse(mUiccCardApplication.isPersoLocked());
     }
 
     @Test

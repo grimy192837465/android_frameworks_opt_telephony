@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The Android Open Source Project
+ * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,62 +22,73 @@ import static com.android.internal.telephony.dataconnection.DcTrackerTest.FAKE_G
 import static com.android.internal.telephony.dataconnection.DcTrackerTest.FAKE_IFNAME;
 import static com.android.internal.telephony.dataconnection.DcTrackerTest.FAKE_PCSCF_ADDRESS;
 
-import android.net.LinkAddress;
-import android.net.NetworkUtils;
-import android.os.Parcel;
-import android.telephony.data.DataCallResponse;
-import android.test.AndroidTestCase;
+import static org.junit.Assert.assertEquals;
+
+import android.net.LinkProperties;
 import android.test.suitebuilder.annotation.SmallTest;
 
-import java.util.Arrays;
+import com.android.internal.telephony.TelephonyTest;
+import com.android.internal.telephony.dataconnection.DataCallResponse.SetupResult;
 
-public class DataCallResponseTest extends AndroidTestCase {
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 
-    @SmallTest
-    public void testParcel() throws Exception {
-        DataCallResponse response = new DataCallResponse(0, -1, 1, 2, "IP", FAKE_IFNAME,
-                Arrays.asList(new LinkAddress(NetworkUtils.numericToInetAddress(FAKE_ADDRESS), 0)),
-                Arrays.asList(NetworkUtils.numericToInetAddress(FAKE_DNS)),
-                Arrays.asList(NetworkUtils.numericToInetAddress(FAKE_GATEWAY)),
-                Arrays.asList(FAKE_PCSCF_ADDRESS),
-                1440);
+public class DataCallResponseTest extends TelephonyTest {
 
-        Parcel p = Parcel.obtain();
-        response.writeToParcel(p, 0);
-        p.setDataPosition(0);
+    DataCallResponse mDcResponse;
 
-        DataCallResponse newResponse = new DataCallResponse(p);
-        assertEquals(response, newResponse);
+    @Before
+    public void setUp() throws Exception {
+        super.setUp(getClass().getSimpleName());
+        mDcResponse = new DataCallResponse(0, -1, 1, 2, "IP", FAKE_IFNAME, FAKE_ADDRESS,
+                FAKE_DNS, FAKE_GATEWAY, FAKE_PCSCF_ADDRESS, 1440);
     }
 
+    @After
+    public void tearDown() throws Exception {
+        super.tearDown();
+    }
+
+    @Test
     @SmallTest
-    public void testEquals() throws Exception {
-        DataCallResponse response = new DataCallResponse(0, -1, 1, 2, "IP", FAKE_IFNAME,
-                Arrays.asList(new LinkAddress(NetworkUtils.numericToInetAddress(FAKE_ADDRESS), 0)),
-                Arrays.asList(NetworkUtils.numericToInetAddress(FAKE_DNS)),
-                Arrays.asList(NetworkUtils.numericToInetAddress(FAKE_GATEWAY)),
-                Arrays.asList(FAKE_PCSCF_ADDRESS),
-                1440);
+    public void testSetLinkProperties() throws Exception {
+        LinkProperties linkProperties = new LinkProperties();
+        assertEquals(SetupResult.SUCCESS,
+                mDcResponse.setLinkProperties(linkProperties, true));
+        logd(linkProperties.toString());
+        assertEquals(mDcResponse.ifname, linkProperties.getInterfaceName());
+        assertEquals(mDcResponse.addresses.length, linkProperties.getAddresses().size());
+        for (int i = 0; i < mDcResponse.addresses.length; ++i) {
+            assertEquals(mDcResponse.addresses[i],
+                    linkProperties.getLinkAddresses().get(i).getAddress().getHostAddress());
+        }
 
-        DataCallResponse response1 = new DataCallResponse(0, -1, 1, 2, "IP", FAKE_IFNAME,
-                Arrays.asList(new LinkAddress(NetworkUtils.numericToInetAddress(FAKE_ADDRESS), 0)),
-                Arrays.asList(NetworkUtils.numericToInetAddress(FAKE_DNS)),
-                Arrays.asList(NetworkUtils.numericToInetAddress(FAKE_GATEWAY)),
-                Arrays.asList(FAKE_PCSCF_ADDRESS),
-                1440);
+        assertEquals(mDcResponse.dnses.length, linkProperties.getDnsServers().size());
+        for (int i = 0; i < mDcResponse.dnses.length; ++i) {
+            assertEquals("i = " + i, mDcResponse.dnses[i],
+                    linkProperties.getDnsServers().get(i).getHostAddress());
+        }
 
-        assertEquals(response, response);
-        assertEquals(response, response1);
+        assertEquals(mDcResponse.gateways.length, linkProperties.getRoutes().size());
+        for (int i = 0; i < mDcResponse.gateways.length; ++i) {
+            assertEquals("i = " + i, mDcResponse.gateways[i],
+                    linkProperties.getRoutes().get(i).getGateway().getHostAddress());
+        }
 
-        DataCallResponse response2 = new DataCallResponse(1, -1, 1, 3, "IP", FAKE_IFNAME,
-                Arrays.asList(new LinkAddress(NetworkUtils.numericToInetAddress(FAKE_ADDRESS), 0)),
-                Arrays.asList(NetworkUtils.numericToInetAddress(FAKE_DNS),
-                        NetworkUtils.numericToInetAddress(FAKE_DNS)),
-                Arrays.asList(NetworkUtils.numericToInetAddress(FAKE_GATEWAY)),
-                Arrays.asList(FAKE_PCSCF_ADDRESS, FAKE_PCSCF_ADDRESS),
-                1441);
-        assertNotSame(response1, response2);
-        assertNotSame(response1, null);
-        assertNotSame(response1, new String[1]);
+        assertEquals(mDcResponse.mtu, linkProperties.getMtu());
+    }
+
+    @Test
+    @SmallTest
+    public void testSetLinkPropertiesInvalidAddress() throws Exception {
+
+        // 224.224.224.224 is an invalid address.
+        mDcResponse = new DataCallResponse(0, -1, 1, 2, "IP", FAKE_IFNAME, "224.224.224.224",
+                FAKE_DNS, FAKE_GATEWAY, FAKE_PCSCF_ADDRESS, 1440);
+
+        LinkProperties linkProperties = new LinkProperties();
+        assertEquals(SetupResult.ERR_UnacceptableParameter,
+                mDcResponse.setLinkProperties(linkProperties, true));
     }
 }

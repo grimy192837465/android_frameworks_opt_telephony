@@ -41,7 +41,7 @@ public class DcTrackerMock extends DcTracker {
         throw new RuntimeException("Not Implemented");
     }
     @Override
-    public void setUserDataEnabled(boolean enable) {
+    public void setDataEnabled(boolean enable) {
         throw new RuntimeException("Not Implemented");
     }
     @Override
@@ -93,11 +93,7 @@ public class DcTrackerMock extends DcTracker {
         throw new RuntimeException("Not Implemented");
     }
     @Override
-    public boolean isUserDataEnabled() {
-        throw new RuntimeException("Not Implemented");
-    }
-    @Override
-    public boolean isDataEnabled() {
+    public boolean getDataEnabled() {
         throw new RuntimeException("Not Implemented");
     }
     @Override

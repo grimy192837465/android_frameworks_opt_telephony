@@ -19,25 +19,24 @@ package com.android.internal.telephony.cat;
 import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Message;
-import android.text.TextUtils;
 
 import com.android.internal.telephony.GsmAlphabet;
 import com.android.internal.telephony.uicc.IccFileHandler;
 
 import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
-
-import static com.android.internal.telephony.cat.CatCmdMessage
-                   .SetupEventListConstants.BROWSER_TERMINATION_EVENT;
-import static com.android.internal.telephony.cat.CatCmdMessage
-                   .SetupEventListConstants.BROWSING_STATUS_EVENT;
-import static com.android.internal.telephony.cat.CatCmdMessage
-                   .SetupEventListConstants.IDLE_SCREEN_AVAILABLE_EVENT;
-import static com.android.internal.telephony.cat.CatCmdMessage
-                   .SetupEventListConstants.LANGUAGE_SELECTION_EVENT;
-import static com.android.internal.telephony.cat.CatCmdMessage
-                   .SetupEventListConstants.USER_ACTIVITY_EVENT;
+import static com.android.internal.telephony.cat.CatCmdMessage.
+                   SetupEventListConstants.USER_ACTIVITY_EVENT;
+import static com.android.internal.telephony.cat.CatCmdMessage.
+                   SetupEventListConstants.IDLE_SCREEN_AVAILABLE_EVENT;
+import static com.android.internal.telephony.cat.CatCmdMessage.
+                   SetupEventListConstants.LANGUAGE_SELECTION_EVENT;
+import static com.android.internal.telephony.cat.CatCmdMessage.
+                   SetupEventListConstants.BROWSER_TERMINATION_EVENT;
+import static com.android.internal.telephony.cat.CatCmdMessage.
+                   SetupEventListConstants.BROWSING_STATUS_EVENT;
+import static com.android.internal.telephony.cat.CatCmdMessage.
+                   SetupEventListConstants.HCI_CONNECTIVITY_EVENT;
 /**
  * Factory class, used for decoding raw byte arrays, received from baseband,
  * into a CommandParams object.
@@ -50,8 +49,6 @@ class CommandParamsFactory extends Handler {
     private int mIconLoadState = LOAD_NO_ICON;
     private RilMessageDecoder mCaller = null;
     private boolean mloadIcon = false;
-    private String mSavedLanguage;
-    private String mRequestedLanguage;
 
     // constants
     static final int MSG_ID_LOAD_ICON_DONE = 1;
@@ -61,19 +58,9 @@ class CommandParamsFactory extends Handler {
     static final int LOAD_SINGLE_ICON       = 1;
     static final int LOAD_MULTI_ICONS       = 2;
 
-    // Command Qualifier values for refresh command
-    static final int REFRESH_NAA_INIT_AND_FULL_FILE_CHANGE  = 0x00;
-    static final int REFRESH_NAA_INIT_AND_FILE_CHANGE       = 0x02;
-    static final int REFRESH_NAA_INIT                       = 0x03;
-    static final int REFRESH_UICC_RESET                     = 0x04;
-
     // Command Qualifier values for PLI command
     static final int DTTZ_SETTING                           = 0x03;
     static final int LANGUAGE_SETTING                       = 0x04;
-
-    // Command Qualifier value for language notification command
-    static final int NON_SPECIFIC_LANGUAGE                  = 0x00;
-    static final int SPECIFIC_LANGUAGE                      = 0x01;
 
     // As per TS 102.223 Annex C, Structure of CAT communications,
     // the APDU length can be max 255 bytes. This leaves only 239 bytes for user
@@ -197,9 +184,8 @@ class CommandParamsFactory extends Handler {
                  cmdPending = processSetupCall(cmdDet, ctlvs);
                  break;
              case REFRESH:
-                processRefresh(cmdDet, ctlvs);
-                cmdPending = false;
-                break;
+                 cmdPending = processEventNotify(cmdDet, ctlvs);
+                 break;
              case LAUNCH_BROWSER:
                  cmdPending = processLaunchBrowser(cmdDet, ctlvs);
                  break;
@@ -212,15 +198,15 @@ class CommandParamsFactory extends Handler {
              case PROVIDE_LOCAL_INFORMATION:
                 cmdPending = processProvideLocalInfo(cmdDet, ctlvs);
                 break;
-             case LANGUAGE_NOTIFICATION:
-                 cmdPending = processLanguageNotification(cmdDet, ctlvs);
-                 break;
              case OPEN_CHANNEL:
              case CLOSE_CHANNEL:
              case RECEIVE_DATA:
              case SEND_DATA:
                  cmdPending = processBIPClient(cmdDet, ctlvs);
                  break;
+            case ACTIVATE:
+                cmdPending = processActivate(cmdDet, ctlvs);
+                break;
             default:
                 // unsupported proactive commands
                 mCmdParams = new CommandParams(cmdDet);
@@ -549,11 +535,6 @@ class CommandParamsFactory extends Handler {
             input.iconSelfExplanatory = iconId.selfExplanatory;
         }
 
-        ctlv = searchForTag(ComprehensionTlvTag.DURATION, ctlvs);
-        if (ctlv != null) {
-            input.duration = ValueParser.retrieveDuration(ctlv);
-        }
-
         input.digitOnly = (cmdDet.commandQualifier & 0x01) == 0;
         input.ucs2 = (cmdDet.commandQualifier & 0x02) != 0;
         input.echo = (cmdDet.commandQualifier & 0x04) == 0;
@@ -580,32 +561,6 @@ class CommandParamsFactory extends Handler {
             mIconLoader.loadIcon(iconId.recordNumber, this
                     .obtainMessage(MSG_ID_LOAD_ICON_DONE));
             return true;
-        }
-        return false;
-    }
-
-    /**
-     * Processes REFRESH proactive command from the SIM card.
-     *
-     * @param cmdDet Command Details container object.
-     * @param ctlvs List of ComprehensionTlv objects following Command Details
-     *        object and Device Identities object within the proactive command
-     */
-    private boolean processRefresh(CommandDetails cmdDet,
-            List<ComprehensionTlv> ctlvs) {
-
-        CatLog.d(this, "process Refresh");
-
-        // REFRESH proactive command is rerouted by the baseband and handled by
-        // the telephony layer. IDLE TEXT should be removed for a REFRESH command
-        // with "initialization" or "reset"
-        switch (cmdDet.commandQualifier) {
-        case REFRESH_NAA_INIT_AND_FULL_FILE_CHANGE:
-        case REFRESH_NAA_INIT_AND_FILE_CHANGE:
-        case REFRESH_NAA_INIT:
-        case REFRESH_UICC_RESET:
-            mCmdParams = new DisplayTextParams(cmdDet, null);
-            break;
         }
         return false;
     }
@@ -794,6 +749,7 @@ class CommandParamsFactory extends Handler {
                         case LANGUAGE_SELECTION_EVENT:
                         case BROWSER_TERMINATION_EVENT:
                         case BROWSING_STATUS_EVENT:
+                        case HCI_CONNECTIVITY_EVENT:
                             eventList[i] = eventValue;
                             i++;
                             break;
@@ -1035,67 +991,6 @@ class CommandParamsFactory extends Handler {
         return false;
     }
 
-    /**
-     * Processes LANGUAGE_NOTIFICATION proactive command from the SIM card.
-     *
-     * The SPECIFIC_LANGUAGE notification sets the specified language.
-     * The NON_SPECIFIC_LANGUAGE notification restores the last specifically set language.
-     *
-     * @param cmdDet Command Details object retrieved from the proactive command object
-     * @param ctlvs List of ComprehensionTlv objects following Command Details
-     *        object and Device Identities object within the proactive command
-     * @return false. This function always returns false meaning that the command
-     *         processing is  not pending and additional asynchronous processing
-     *         is not required.
-     */
-    private boolean processLanguageNotification(CommandDetails cmdDet, List<ComprehensionTlv> ctlvs)
-            throws ResultException {
-        CatLog.d(this, "process Language Notification");
-
-        String desiredLanguage = null;
-        String currentLanguage = Locale.getDefault().getLanguage();
-        switch (cmdDet.commandQualifier) {
-            case NON_SPECIFIC_LANGUAGE:
-                if (!TextUtils.isEmpty(mSavedLanguage) && (!TextUtils.isEmpty(mRequestedLanguage)
-                        && mRequestedLanguage.equals(currentLanguage))) {
-                    CatLog.d(this, "Non-specific language notification changes the language "
-                            + "setting back to " + mSavedLanguage);
-                    desiredLanguage = mSavedLanguage;
-                }
-
-                mSavedLanguage = null;
-                mRequestedLanguage = null;
-                break;
-            case SPECIFIC_LANGUAGE:
-                ComprehensionTlv ctlv = searchForTag(ComprehensionTlvTag.LANGUAGE, ctlvs);
-                if (ctlv != null) {
-                    int valueLen = ctlv.getLength();
-                    if (valueLen != 2) {
-                        throw new ResultException(ResultCode.CMD_DATA_NOT_UNDERSTOOD);
-                    }
-
-                    byte[] rawValue = ctlv.getRawValue();
-                    int valueIndex = ctlv.getValueIndex();
-                    desiredLanguage = GsmAlphabet.gsm8BitUnpackedToString(rawValue, valueIndex, 2);
-
-                    if (TextUtils.isEmpty(mSavedLanguage) || (!TextUtils.isEmpty(mRequestedLanguage)
-                            && !mRequestedLanguage.equals(currentLanguage))) {
-                        mSavedLanguage = currentLanguage;
-                    }
-                    mRequestedLanguage = desiredLanguage;
-                    CatLog.d(this, "Specific language notification changes the language setting to "
-                            + mRequestedLanguage);
-                }
-                break;
-            default:
-                CatLog.d(this, "LN[" + cmdDet.commandQualifier + "] Command Not Supported");
-                break;
-        }
-
-        mCmdParams = new LanguageParams(cmdDet, desiredLanguage);
-        return false;
-    }
-
     private boolean processBIPClient(CommandDetails cmdDet,
                                      List<ComprehensionTlv> ctlvs) throws ResultException {
         AppInterface.CommandType commandType =
@@ -1131,6 +1026,27 @@ class CommandParamsFactory extends Handler {
             mIconLoadState = LOAD_SINGLE_ICON;
             mIconLoader.loadIcon(iconId.recordNumber, obtainMessage(MSG_ID_LOAD_ICON_DONE));
             return true;
+        }
+        return false;
+    }
+
+    private boolean processActivate(CommandDetails cmdDet,
+                                     List<ComprehensionTlv> ctlvs) throws ResultException {
+        AppInterface.CommandType commandType =
+                AppInterface.CommandType.fromInt(cmdDet.typeOfCommand);
+        CatLog.d(this, "process " + commandType.name());
+
+        ComprehensionTlv ctlv = null;
+        int target;
+
+        //parse activate descriptor
+        ctlv = searchForTag(ComprehensionTlvTag.ACTIVATE_DESCRIPTOR, ctlvs);
+        if (ctlv != null) {
+            target = ValueParser.retrieveTarget(ctlv);
+            mCmdParams = new CommandParams(cmdDet);
+            CatLog.d(this, "Activate cmd target = " + target);
+        } else {
+            CatLog.d(this, "ctlv is null");
         }
         return false;
     }

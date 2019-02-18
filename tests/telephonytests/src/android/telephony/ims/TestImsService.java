@@ -16,46 +16,44 @@
 
 package android.telephony.ims;
 
-import static org.mockito.Mockito.spy;
-
 import android.content.Context;
-import android.telephony.ims.feature.MmTelFeature;
+import android.telephony.ims.feature.MMTelFeature;
 import android.telephony.ims.feature.RcsFeature;
-import android.telephony.ims.stub.ImsFeatureConfiguration;
 
 import org.mockito.MockitoAnnotations;
+import org.mockito.Spy;
+
+import static org.mockito.Mockito.spy;
 
 /**
  * Test ImsService used by mockito to verify functionality.
  */
 
-public class TestImsService extends android.telephony.ims.ImsService {
+public class TestImsService extends ImsService {
 
-    public TestMmTelFeature mSpyMmTelFeature;
-    public TestMmTelFeature mTestMmTelFeature;
-
-    public ImsFeatureConfiguration testFeatureConfig;
+    public TestMMTelFeature mSpyMMTelFeature;
+    private TestMMTelFeature mTestMMTelFeature;
 
     public TestImsService(Context context) {
         attachBaseContext(context);
         MockitoAnnotations.initMocks(this);
         // Must create real MMTelFeature to initialize ImsFeature objects.
-        mTestMmTelFeature = new TestMmTelFeature();
-        mSpyMmTelFeature = spy(mTestMmTelFeature);
+        mTestMMTelFeature = new TestMMTelFeature();
+        mSpyMMTelFeature = spy(mTestMMTelFeature);
     }
 
     @Override
-    public MmTelFeature createMmTelFeature(int slotId) {
-        return mSpyMmTelFeature;
-    }
-
-    @Override
-    public RcsFeature createRcsFeature(int slotId) {
+    public MMTelFeature onCreateEmergencyMMTelImsFeature(int slotId) {
         return null;
     }
 
     @Override
-    public ImsFeatureConfiguration querySupportedImsFeatures() {
-        return testFeatureConfig;
+    public MMTelFeature onCreateMMTelImsFeature(int slotId) {
+        return mSpyMMTelFeature;
+    }
+
+    @Override
+    public RcsFeature onCreateRcsFeature(int slotId) {
+        return null;
     }
 }

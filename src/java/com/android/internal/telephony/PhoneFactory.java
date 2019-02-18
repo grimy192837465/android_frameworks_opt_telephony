@@ -35,15 +35,14 @@ import android.util.LocalLog;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.telephony.cdma.CdmaSubscriptionSourceManager;
 import com.android.internal.telephony.dataconnection.TelephonyNetworkFactory;
-import com.android.internal.telephony.euicc.EuiccCardController;
 import com.android.internal.telephony.euicc.EuiccController;
 import com.android.internal.telephony.ims.ImsResolver;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneFactory;
 import com.android.internal.telephony.sip.SipPhone;
 import com.android.internal.telephony.sip.SipPhoneFactory;
+import com.android.internal.telephony.uicc.IccCardProxy;
 import com.android.internal.telephony.uicc.UiccController;
-import com.android.internal.telephony.uicc.UiccProfile;
 import com.android.internal.telephony.util.NotificationChannelController;
 import com.android.internal.util.IndentingPrintWriter;
 
@@ -74,7 +73,6 @@ public class PhoneFactory {
     static private UiccController sUiccController;
     private static IntentBroadcaster sIntentBroadcaster;
     private static @Nullable EuiccController sEuiccController;
-    private static @Nullable EuiccCardController sEuiccCardController;
 
     static private CommandsInterface sCommandsInterface = null;
     static private SubscriptionInfoUpdater sSubInfoRecordUpdater = null;
@@ -137,27 +135,26 @@ public class PhoneFactory {
 
                 sPhoneNotifier = new DefaultPhoneNotifier();
                 TelephonyComponentFactory telephonyComponentFactory
-                        = TelephonyComponentFactory.getInstance();
+                    = TelephonyComponentFactory.getInstance();
 
                 int cdmaSubscription = CdmaSubscriptionSourceManager.getDefault(context);
                 Rlog.i(LOG_TAG, "Cdma Subscription set to " + cdmaSubscription);
+
+                if (context.getPackageManager().hasSystemFeature(
+                        PackageManager.FEATURE_TELEPHONY_EUICC)) {
+                    sEuiccController = EuiccController.init(context);
+                }
 
                 /* In case of multi SIM mode two instances of Phone, RIL are created,
                    where as in single SIM mode only instance. isMultiSimEnabled() function checks
                    whether it is single SIM or multi SIM mode */
                 int numPhones = TelephonyManager.getDefault().getPhoneCount();
-                // Return whether or not the device should use dynamic binding or the static
-                // implementation (deprecated)
-                boolean isDynamicBinding = sContext.getResources().getBoolean(
-                        com.android.internal.R.bool.config_dynamic_bind_ims);
-                // Get the package name of the default IMS implementation.
+                // Start ImsResolver and bind to ImsServices.
                 String defaultImsPackage = sContext.getResources().getString(
                         com.android.internal.R.string.config_ims_package);
-                // Start ImsResolver and bind to ImsServices.
                 Rlog.i(LOG_TAG, "ImsResolver: defaultImsPackage: " + defaultImsPackage);
-                sImsResolver = new ImsResolver(sContext, defaultImsPackage, numPhones,
-                        isDynamicBinding);
-                sImsResolver.initPopulateCacheAndStartBind();
+                sImsResolver = new ImsResolver(sContext, defaultImsPackage, numPhones);
+                sImsResolver.populateCacheAndStartBind();
 
                 int[] networkModes = new int[numPhones];
                 sPhones = new Phone[numPhones];
@@ -174,17 +171,11 @@ public class PhoneFactory {
                             networkModes[i], cdmaSubscription, i);
                 }
                 Rlog.i(LOG_TAG, "Creating SubscriptionController");
-                telephonyComponentFactory.initSubscriptionController(context, sCommandsInterfaces);
-
+                telephonyComponentFactory.initSubscriptionController(
+                        context, sCommandsInterfaces);
                 // Instantiate UiccController so that all other classes can just
                 // call getInstance()
                 sUiccController = UiccController.make(context, sCommandsInterfaces);
-
-                if (context.getPackageManager().hasSystemFeature(
-                        PackageManager.FEATURE_TELEPHONY_EUICC)) {
-                    sEuiccController = EuiccController.init(context);
-                    sEuiccCardController = EuiccCardController.init(context);
-                }
 
                 for (int i = 0; i < numPhones; i++) {
                     Phone phone = null;
@@ -197,7 +188,7 @@ public class PhoneFactory {
                     } else if (phoneType == PhoneConstants.PHONE_TYPE_CDMA) {
                         phone = telephonyComponentFactory.makePhone(context,
                                 sCommandsInterfaces[i], sPhoneNotifier, i,
-                                PhoneConstants.PHONE_TYPE_CDMA_LTE,
+                                PhoneConstants.PHONE_TYPE_CDMA,
                                 telephonyComponentFactory);
                     }
                     Rlog.i(LOG_TAG, "Creating Phone with type = " + phoneType + " sub = " + i);
@@ -228,7 +219,7 @@ public class PhoneFactory {
 
                 Rlog.i(LOG_TAG, "Creating SubInfoRecordUpdater ");
                 sSubInfoRecordUpdater = telephonyComponentFactory.makeSubscriptionInfoUpdater(
-                        BackgroundThread.get().getLooper(), context, sPhones, sCommandsInterfaces);
+                        context, sPhones, sCommandsInterfaces);
                 SubscriptionController.getInstance().updatePhonesAvailability(sPhones);
 
                 // Start monitoring after defaults have been made.
@@ -263,6 +254,7 @@ public class PhoneFactory {
                             sPhoneSwitcher, sc, sSubscriptionMonitor, Looper.myLooper(),
                             sContext, i, sPhones[i].mDcTracker);
                 }
+
                 telephonyComponentFactory.makeExtTelephonyClasses(
                         context, sPhones, sCommandsInterfaces);
             }
@@ -312,10 +304,6 @@ public class PhoneFactory {
         }
     }
 
-    public static SubscriptionInfoUpdater getSubscriptionInfoUpdater() {
-        return sSubInfoRecordUpdater;
-    }
-
     public static ImsResolver getImsResolver() {
         return sImsResolver;
     }
@@ -337,24 +325,28 @@ public class PhoneFactory {
      */
     // TODO: Fix when we "properly" have TelephonyDevController/SubscriptionController ..
     public static int calculatePreferredNetworkType(Context context, int phoneSubId) {
-        int networkType = android.provider.Settings.Global.getInt(context.getContentResolver(),
-                android.provider.Settings.Global.PREFERRED_NETWORK_MODE + phoneSubId,
-                -1 /* invalid network mode */);
+        int phoneId = SubscriptionController.getInstance().getPhoneId(phoneSubId);
+        int phoneIdNetworkType = RILConstants.PREFERRED_NETWORK_MODE;
+        try {
+            phoneIdNetworkType = TelephonyManager.getIntAtIndex(context.getContentResolver(),
+                    Settings.Global.PREFERRED_NETWORK_MODE , phoneId);
+        } catch (SettingNotFoundException snfe) {
+            Rlog.e(LOG_TAG, "Settings Exception Reading Valuefor phoneID");
+        }
+        int networkType = phoneIdNetworkType;
+        Rlog.d(LOG_TAG, "calculatePreferredNetworkType: phoneId = " + phoneId +
+                " phoneIdNetworkType = " + phoneIdNetworkType);
+
+        if (SubscriptionController.getInstance().isActiveSubId(phoneSubId)) {
+            networkType = android.provider.Settings.Global.getInt(context.getContentResolver(),
+                    android.provider.Settings.Global.PREFERRED_NETWORK_MODE + phoneSubId,
+                    phoneIdNetworkType);
+        } else {
+            Rlog.d(LOG_TAG, "calculatePreferredNetworkType: phoneSubId = " + phoneSubId +
+                    " is not a active SubId");
+        }
         Rlog.d(LOG_TAG, "calculatePreferredNetworkType: phoneSubId = " + phoneSubId +
                 " networkType = " + networkType);
-
-        if (networkType == -1) {
-            networkType = RILConstants.PREFERRED_NETWORK_MODE;
-            try {
-                networkType = TelephonyManager.getIntAtIndex(context.getContentResolver(),
-                        android.provider.Settings.Global.PREFERRED_NETWORK_MODE,
-                        SubscriptionController.getInstance().getPhoneId(phoneSubId));
-            } catch (SettingNotFoundException retrySnfe) {
-                Rlog.e(LOG_TAG, "Settings Exception Reading Value At Index for "
-                        + "Settings.Global.PREFERRED_NETWORK_MODE");
-            }
-        }
-
         return networkType;
     }
 
@@ -463,10 +455,7 @@ public class PhoneFactory {
             pw.println("++++++++++++++++++++++++++++++++");
 
             try {
-                UiccProfile uiccProfile = (UiccProfile) phone.getIccCard();
-                if (uiccProfile != null) {
-                    uiccProfile.dump(fd, pw, args);
-                }
+                ((IccCardProxy)phone.getIccCard()).dump(fd, pw, args);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -501,7 +490,6 @@ public class PhoneFactory {
             pw.increaseIndent();
             try {
                 sEuiccController.dump(fd, pw, args);
-                sEuiccCardController.dump(fd, pw, args);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -562,4 +550,11 @@ public class PhoneFactory {
         pw.flush();
         pw.decreaseIndent();
     }
+    //VENDOR_EDIT
+    /**@hide*/
+    public static PhoneSwitcher oemGetPhoneSwitcher()
+    {
+        return sPhoneSwitcher;
+    }
+    //end
 }

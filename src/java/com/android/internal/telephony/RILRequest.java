@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2006 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,8 @@ import android.os.AsyncResult;
 import android.os.Message;
 import android.os.SystemClock;
 import android.os.WorkSource;
-import android.os.WorkSource.WorkChain;
 import android.telephony.Rlog;
 
-import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -53,18 +51,6 @@ public class RILRequest {
     // time in ms when RIL request was made
     long mStartTimeMs;
 
-    public int getSerial() {
-        return mSerial;
-    }
-
-    public int getRequest() {
-        return mRequest;
-    }
-
-    public Message getResult() {
-        return mResult;
-    }
-
     /**
      * Retrieves a new RILRequest instance from the pool.
      *
@@ -75,7 +61,7 @@ public class RILRequest {
     private static RILRequest obtain(int request, Message result) {
         RILRequest rr = null;
 
-        synchronized (sPoolSync) {
+        synchronized(sPoolSync) {
             if (sPool != null) {
                 rr = sPool;
                 sPool = rr.mNext;
@@ -112,41 +98,18 @@ public class RILRequest {
      * @param workSource WorkSource to track the client
      * @return a RILRequest instance from the pool.
      */
-    // @VisibleForTesting
-    public static RILRequest obtain(int request, Message result, WorkSource workSource) {
+    static RILRequest obtain(int request, Message result, WorkSource workSource) {
         RILRequest rr = null;
 
         rr = obtain(request, result);
-        if (workSource != null) {
+        if(workSource != null) {
             rr.mWorkSource = workSource;
-            rr.mClientId = rr.getWorkSourceClientId();
+            rr.mClientId = String.valueOf(workSource.get(0)) + ":" + workSource.getName(0);
         } else {
             Rlog.e(LOG_TAG, "null workSource " + request);
         }
 
         return rr;
-    }
-
-    /**
-     * Generate a String client ID from the WorkSource.
-     */
-    // @VisibleForTesting
-    public String getWorkSourceClientId() {
-        if (mWorkSource == null || mWorkSource.isEmpty()) {
-            return null;
-        }
-
-        if (mWorkSource.size() > 0) {
-            return mWorkSource.get(0) + ":" + mWorkSource.getName(0);
-        }
-
-        final ArrayList<WorkChain> workChains = mWorkSource.getWorkChains();
-        if (workChains != null && !workChains.isEmpty()) {
-            final WorkChain workChain = workChains.get(0);
-            return workChain.getAttributionUid() + ":" + workChain.getTags()[0];
-        }
-
-        return null;
     }
 
     /**
@@ -161,9 +124,9 @@ public class RILRequest {
                 sPool = this;
                 sPoolSize++;
                 mResult = null;
-                if (mWakeLockType != RIL.INVALID_WAKELOCK) {
+                if(mWakeLockType != RIL.INVALID_WAKELOCK) {
                     //This is OK for some wakelock types and not others
-                    if (mWakeLockType == RIL.FOR_WAKELOCK) {
+                    if(mWakeLockType == RIL.FOR_WAKELOCK) {
                         Rlog.e(LOG_TAG, "RILRequest releasing with held wake lock: "
                                 + serialString());
                     }
@@ -175,24 +138,26 @@ public class RILRequest {
     private RILRequest() {
     }
 
-    static void resetSerial() {
+    static void
+    resetSerial() {
         // use a random so that on recovery we probably don't mix old requests
         // with new.
         sNextSerial.set(sRandom.nextInt());
     }
 
-    String serialString() {
+    String
+    serialString() {
         //Cheesy way to do %04d
         StringBuilder sb = new StringBuilder(8);
         String sn;
 
-        long adjustedSerial = (((long) mSerial) - Integer.MIN_VALUE) % 10000;
+        long adjustedSerial = (((long)mSerial) - Integer.MIN_VALUE)%10000;
 
         sn = Long.toString(adjustedSerial);
 
         //sb.append("J[");
         sb.append('[');
-        for (int i = 0, s = sn.length(); i < 4 - s; i++) {
+        for (int i = 0, s = sn.length() ; i < 4 - s; i++) {
             sb.append('0');
         }
 
@@ -201,20 +166,24 @@ public class RILRequest {
         return sb.toString();
     }
 
-    void onError(int error, Object ret) {
+    void
+    onError(int error, Object ret) {
         CommandException ex;
 
         ex = CommandException.fromRilErrno(error);
 
-        if (RIL.RILJ_LOGD) {
-            Rlog.d(LOG_TAG, serialString() + "< "
-                    + RIL.requestToString(mRequest)
-                    + " error: " + ex + " ret=" + RIL.retToString(mRequest, ret));
-        }
+        if (RIL.RILJ_LOGD) Rlog.d(LOG_TAG, serialString() + "< "
+            + RIL.requestToString(mRequest)
+            + " error: " + ex + " ret=" + RIL.retToString(mRequest, ret));
 
         if (mResult != null) {
             AsyncResult.forMessage(mResult, ret, ex);
             mResult.sendToTarget();
         }
+    }
+
+    public Message
+    getResult() {
+        return mResult;
     }
 }

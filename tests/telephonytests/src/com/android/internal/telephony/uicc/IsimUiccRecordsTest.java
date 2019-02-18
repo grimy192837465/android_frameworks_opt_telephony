@@ -30,21 +30,28 @@
 package com.android.internal.telephony.uicc;
 
 import org.mockito.Mock;
-import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.*;
+import org.mockito.MockitoAnnotations;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import com.android.internal.telephony.TelephonyTest;
 import org.mockito.ArgumentCaptor;
+import static org.junit.Assert.*;
+import java.lang.reflect.Method;
+import java.lang.reflect.Field;
+import junit.framework.Assert;
 
+import com.android.internal.telephony.CommandsInterface;
 import android.content.Context;
 import android.content.Intent;
-import android.os.AsyncResult;
 import android.os.HandlerThread;
 import android.os.Message;
 
 public class IsimUiccRecordsTest extends TelephonyTest {
+
+    @Mock
+    private CommandsInterface mMockCI;
 
     private IsimUiccRecords mIsimUiccRecords;
 
@@ -55,7 +62,7 @@ public class IsimUiccRecordsTest extends TelephonyTest {
 
         @Override
         public void onLooperPrepared() {
-            mIsimUiccRecords = new IsimUiccRecords(mUiccCardApplication3gpp, mContext, mSimulatedCommands);
+            mIsimUiccRecords = new IsimUiccRecords(mUiccCardApplication3gpp, mContext, mMockCI);
             setReady(true);
         }
     }
@@ -63,6 +70,7 @@ public class IsimUiccRecordsTest extends TelephonyTest {
     @Before
     public void setUp() throws Exception {
         super.setUp(this.getClass().getSimpleName());
+        mMockCI = mock(CommandsInterface.class);
         new IsimUiccRecordsTestHandler(TAG).start();
         waitUntilReady();
     }
@@ -77,14 +85,38 @@ public class IsimUiccRecordsTest extends TelephonyTest {
     @Test
     public void testBroadcastRefresh() {
         Message msg = new Message();
-        msg.what = IccRecords.EVENT_REFRESH;
-        msg.obj = new AsyncResult(null, null, null);
+        msg.what = (Integer) getStaticField(IsimUiccRecords.class,
+            mIsimUiccRecords, "EVENT_ISIM_REFRESH");
         mIsimUiccRecords.handleMessage(msg);
         ArgumentCaptor<Intent> intentCapture = ArgumentCaptor.forClass(Intent.class);
         verify(mContext).sendBroadcast(intentCapture.capture());
 
         assertEquals(
             ((Intent) intentCapture.getValue()).getAction(), IsimUiccRecords.INTENT_ISIM_REFRESH);
+    }
+
+    private Object invokeNonStaticMethod(Class clazz, Object caller, String method,
+                                            Class[] clsParams, Object[] params) {
+        try {
+            Method methodReflection = clazz.getDeclaredMethod(method, clsParams);
+            methodReflection.setAccessible(true);
+            return methodReflection.invoke(caller, params);
+        } catch (Exception e) {
+            Assert.fail(e.toString());
+            return null;
+        }
+    }
+
+    private Object getStaticField(Class clazz, Object caller, String field) {
+        try {
+            Field fieldReflection = clazz.getDeclaredField(field);
+            fieldReflection.setAccessible(true);
+            Object fieldValue = fieldReflection.get(caller);
+            return fieldValue;
+        } catch (Exception e) {
+            Assert.fail(e.toString());
+            return null;
+        }
     }
 
 }

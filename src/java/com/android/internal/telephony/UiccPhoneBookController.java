@@ -54,13 +54,14 @@ public class UiccPhoneBookController extends IIccPhoneBook.Stub {
     updateAdnRecordsInEfBySearchForSubscriber(int subId, int efid, String oldTag,
             String oldPhoneNumber, String newTag, String newPhoneNumber,
             String pin2) throws android.os.RemoteException {
-        IccPhoneBookInterfaceManager iccPbkIntMgr = getIccPhoneBookInterfaceManager(subId);
+        IccPhoneBookInterfaceManager iccPbkIntMgr =
+                             getIccPhoneBookInterfaceManager(subId);
         if (iccPbkIntMgr != null) {
             return iccPbkIntMgr.updateAdnRecordsInEfBySearch(efid, oldTag,
                     oldPhoneNumber, newTag, newPhoneNumber, pin2);
         } else {
             Rlog.e(TAG,"updateAdnRecordsInEfBySearch iccPbkIntMgr is" +
-                    " null for Subscription:" + subId);
+                      " null for Subscription:"+subId);
             return false;
         }
     }
@@ -77,13 +78,14 @@ public class UiccPhoneBookController extends IIccPhoneBook.Stub {
     public boolean
     updateAdnRecordsInEfByIndexForSubscriber(int subId, int efid, String newTag,
             String newPhoneNumber, int index, String pin2) throws android.os.RemoteException {
-        IccPhoneBookInterfaceManager iccPbkIntMgr = getIccPhoneBookInterfaceManager(subId);
+        IccPhoneBookInterfaceManager iccPbkIntMgr =
+                             getIccPhoneBookInterfaceManager(subId);
         if (iccPbkIntMgr != null) {
             return iccPbkIntMgr.updateAdnRecordsInEfByIndex(efid, newTag,
                     newPhoneNumber, index, pin2);
         } else {
             Rlog.e(TAG,"updateAdnRecordsInEfByIndex iccPbkIntMgr is" +
-                    " null for Subscription:" + subId);
+                      " null for Subscription:"+subId);
             return false;
         }
     }

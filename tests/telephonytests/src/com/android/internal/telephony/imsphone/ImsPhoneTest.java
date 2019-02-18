@@ -52,10 +52,10 @@ import android.telephony.CarrierConfigManager;
 import android.telephony.ServiceState;
 import android.test.suitebuilder.annotation.SmallTest;
 
-import android.telephony.ims.ImsCallProfile;
+import com.android.ims.ImsCallProfile;
 import com.android.ims.ImsEcbmStateListener;
 import com.android.ims.ImsManager;
-import android.telephony.ims.ImsReasonInfo;
+import com.android.ims.ImsReasonInfo;
 import com.android.ims.ImsUtInterface;
 import com.android.internal.telephony.Call;
 import com.android.internal.telephony.CommandsInterface;
@@ -122,6 +122,7 @@ public class ImsPhoneTest extends TelephonyTest {
         doReturn(Call.State.IDLE).when(mBackgroundCall).getState();
         doReturn(Call.State.IDLE).when(mRingingCall).getState();
 
+        mImsManagerInstances.put(mPhone.getPhoneId(), mImsManager);
         mContextFixture.putBooleanResource(com.android.internal.R.bool.config_voice_capable, true);
 
         mImsPhoneTestHandler = new ImsPhoneTestHandler(TAG);
@@ -389,9 +390,17 @@ public class ImsPhoneTest extends TelephonyTest {
         String dialString = "1234567890";
         int videoState = 0;
 
-        mImsPhoneUT.dial(dialString,
-                new ImsPhone.ImsDialArgs.Builder().setVideoState(videoState).build());
-        verify(mImsCT).dial(eq(dialString), any(ImsPhone.ImsDialArgs.class));
+        mImsPhoneUT.dial(dialString, videoState);
+        verify(mImsCT).dial(dialString, videoState, null);
+    }
+
+    @Test
+    @SmallTest
+    public void testAddParticipant() throws Exception {
+        String dialString = "1234567890";
+
+        mImsPhoneUT.addParticipant(dialString, null);
+        verify(mImsCT).addParticipant(dialString, null);
     }
 
     @Test
@@ -489,47 +498,49 @@ public class ImsPhoneTest extends TelephonyTest {
     }
 
     @Test
+    @SmallTest
     public void testShouldSendNotificationWhenServiceStateIsChanged() {
         mImsPhoneUT.setServiceState(ServiceState.STATE_IN_SERVICE);
-        reset(mSST);
+        reset(mNotifier);
 
         mImsPhoneUT.setServiceState(ServiceState.STATE_OUT_OF_SERVICE);
-        verify(mSST).onImsServiceStateChanged();
+        verify(mNotifier).notifyServiceState(mPhone);
     }
 
     @Test
+    @SmallTest
     public void testShouldNotSendNotificationWhenServiceStateIsNotChanged() {
         mImsPhoneUT.setServiceState(ServiceState.STATE_IN_SERVICE);
-        reset(mSST);
+        reset(mNotifier);
 
         mImsPhoneUT.setServiceState(ServiceState.STATE_IN_SERVICE);
-        verify(mSST, never()).onImsServiceStateChanged();
+        verify(mNotifier, never()).notifyServiceState(mPhone);
     }
 
     @Test
     @SmallTest
     public void testCellBarring() throws Exception {
         Message msg = mTestHandler.obtainMessage();
-        mImsPhoneUT.getCallBarring(CommandsInterface.CB_FACILITY_BAOC, msg,
-                CommandsInterface.SERVICE_CLASS_NONE);
+        mImsPhoneUT.getCallBarring(CommandsInterface.CB_FACILITY_BAOC, msg);
 
         ArgumentCaptor<Message> messageArgumentCaptor = ArgumentCaptor.forClass(Message.class);
         verify(mImsUtInterface).queryCallBarring(eq(ImsUtInterface.CB_BAOC),
-                messageArgumentCaptor.capture(), eq(CommandsInterface.SERVICE_CLASS_NONE));
+                eq(CommandsInterface.SERVICE_CLASS_NONE),
+                messageArgumentCaptor.capture());
         assertEquals(msg, messageArgumentCaptor.getValue().obj);
 
-        mImsPhoneUT.setCallBarring(CommandsInterface.CB_FACILITY_BAOIC, true, "abc", msg,
-                CommandsInterface.SERVICE_CLASS_NONE);
+        mImsPhoneUT.setCallBarring(CommandsInterface.CB_FACILITY_BAOIC, true, "abc", msg);
         verify(mImsUtInterface).updateCallBarring(eq(ImsUtInterface.CB_BOIC),
-                eq(CommandsInterface.CF_ACTION_ENABLE), messageArgumentCaptor.capture(),
-                (String[]) eq(null), eq(CommandsInterface.SERVICE_CLASS_NONE));
+                eq(CommandsInterface.CF_ACTION_ENABLE),
+                eq(CommandsInterface.SERVICE_CLASS_NONE), messageArgumentCaptor.capture(),
+                (String[]) eq(null));
         assertEquals(msg, messageArgumentCaptor.getValue().obj);
 
-        mImsPhoneUT.setCallBarring(CommandsInterface.CB_FACILITY_BAOICxH, false, "abc", msg,
-                CommandsInterface.SERVICE_CLASS_NONE);
+        mImsPhoneUT.setCallBarring(CommandsInterface.CB_FACILITY_BAOICxH, false, "abc", msg);
         verify(mImsUtInterface).updateCallBarring(eq(ImsUtInterface.CB_BOIC_EXHC),
-                eq(CommandsInterface.CF_ACTION_DISABLE), messageArgumentCaptor.capture(),
-                (String[])eq(null), eq(CommandsInterface.SERVICE_CLASS_NONE));
+                eq(CommandsInterface.CF_ACTION_DISABLE),
+                eq(CommandsInterface.SERVICE_CLASS_NONE), messageArgumentCaptor.capture(),
+                (String[])eq(null));
         assertEquals(msg, messageArgumentCaptor.getValue().obj);
     }
 

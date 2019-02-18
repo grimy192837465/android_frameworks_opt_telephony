@@ -19,8 +19,8 @@ package com.android.internal.telephony.uicc;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.telephony.PhoneNumberUtils;
-import android.telephony.Rlog;
 import android.text.TextUtils;
+import android.telephony.Rlog;
 
 import com.android.internal.telephony.GsmAlphabet;
 
@@ -82,7 +82,6 @@ public class AdnRecord implements Parcelable {
             String number;
             String[] emails;
             String[] additionalNumbers;
-
             efid = source.readInt();
             recordNumber = source.readInt();
             alphaTag = source.readString();
@@ -205,8 +204,8 @@ public class AdnRecord implements Parcelable {
     }
 
     public boolean isEmpty() {
-        return TextUtils.isEmpty(mAlphaTag) && TextUtils.isEmpty(mNumber) && mEmails == null &&
-                mAdditionalNumbers == null;
+        return TextUtils.isEmpty(mAlphaTag) && TextUtils.isEmpty(mNumber) && mEmails == null
+                && mAdditionalNumbers == null;
     }
 
     public boolean hasExtendedRecord() {
@@ -273,8 +272,8 @@ public class AdnRecord implements Parcelable {
     public boolean isEqual(AdnRecord adn) {
         return ( stringCompareNullEqualsEmpty(mAlphaTag, adn.mAlphaTag) &&
                 stringCompareNullEqualsEmpty(mNumber, adn.mNumber) &&
-                arrayCompareNullEqualsEmpty(mEmails, adn.mEmails) &&
-                arrayCompareNullEqualsEmpty(mAdditionalNumbers, adn.mAdditionalNumbers));
+                arrayCompareNullEqualsEmpty(mEmails, adn.mEmails)
+                && arrayCompareNullEqualsEmpty(mAdditionalNumbers, adn.mAdditionalNumbers));
     }
 
     //***** Parcelable Implementation
@@ -314,29 +313,28 @@ public class AdnRecord implements Parcelable {
             adnString[i] = (byte) 0xFF;
         }
 
-        if (TextUtils.isEmpty(mNumber) && TextUtils.isEmpty(mAlphaTag)) {
+        if ((TextUtils.isEmpty(mNumber)) && (TextUtils.isEmpty(mAlphaTag))) {
             Rlog.w(LOG_TAG, "[buildAdnString] Empty dialing number");
             return adnString;   // return the empty record (for delete)
-        } else if (mNumber != null &&
-                mNumber.length() > (ADN_DIALING_NUMBER_END - ADN_DIALING_NUMBER_START + 1) * 2) {
+        } else if ((mNumber != null) && (mNumber.length()
+                > (ADN_DIALING_NUMBER_END - ADN_DIALING_NUMBER_START + 1) * 2)) {
             Rlog.w(LOG_TAG,
                     "[buildAdnString] Max length of dialing number is 20");
             return null;
         }
 
-        byteTag = !TextUtils.isEmpty(mAlphaTag) ? GsmAlphabet.stringToGsm8BitPacked(mAlphaTag)
+        byteTag = !TextUtils.isEmpty(mAlphaTag) ? IccUtils.stringToAdnStringField(mAlphaTag)
                 : new byte[0];
 
         if (byteTag.length > footerOffset) {
             Rlog.w(LOG_TAG, "[buildAdnString] Max length of tag is " + footerOffset);
             return null;
         } else {
-            if (!TextUtils.isEmpty(mNumber)) {
-                bcdNumber = PhoneNumberUtils.numberToCalledPartyBCD(
-                        mNumber, PhoneNumberUtils.BCD_EXTENDED_TYPE_EF_ADN);
+            if (!(TextUtils.isEmpty(mNumber))) {
+                bcdNumber = PhoneNumberUtils.numberToCalledPartyBCD(mNumber);
 
-                System.arraycopy(bcdNumber, 0, adnString,
-                        footerOffset + ADN_TON_AND_NPI, bcdNumber.length);
+            System.arraycopy(bcdNumber, 0, adnString,
+                    footerOffset + ADN_TON_AND_NPI, bcdNumber.length);
 
                 adnString[footerOffset + ADN_BCD_NUMBER_LENGTH]
                         = (byte) (bcdNumber.length);
@@ -375,10 +373,7 @@ public class AdnRecord implements Parcelable {
             }
 
             mNumber += PhoneNumberUtils.calledPartyBCDFragmentToString(
-                    extRecord,
-                    2,
-                    0xff & extRecord[1],
-                    PhoneNumberUtils.BCD_EXTENDED_TYPE_EF_ADN);
+                                        extRecord, 2, 0xff & extRecord[1]);
 
             // We don't support ext record chaining.
 
@@ -416,10 +411,7 @@ public class AdnRecord implements Parcelable {
             // the ME (see note 2)."
 
             mNumber = PhoneNumberUtils.calledPartyBCDToString(
-                    record,
-                    footerOffset + 1,
-                    numberLength,
-                    PhoneNumberUtils.BCD_EXTENDED_TYPE_EF_ADN);
+                            record, footerOffset + 1, numberLength);
 
 
             mExtRecord = 0xff & record[record.length - 1];

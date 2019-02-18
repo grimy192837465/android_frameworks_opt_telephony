@@ -77,13 +77,13 @@ public class CdmaSmsTest extends AndroidTestCase {
         }
         addr = CdmaSmsAddress.parse("(+886) 917 222 555");
         assertEquals(addr.ton, CdmaSmsAddress.TON_INTERNATIONAL_OR_IP);
-        assertEquals(addr.digitMode, CdmaSmsAddress.DIGIT_MODE_8BIT_CHAR);
+        assertEquals(addr.digitMode, CdmaSmsAddress.DIGIT_MODE_4BIT_DTMF);
         assertEquals(addr.numberMode, CdmaSmsAddress.NUMBER_MODE_NOT_DATA_NETWORK);
         assertEquals(addr.numberOfDigits, 12);
         assertEquals(addr.origBytes.length, 12);
-        String expectedAddr = "886917222555";
-        for (int i = 0; i < addr.numberOfDigits; i++) {
-            assertEquals((int) expectedAddr.charAt(i), addr.origBytes[i]);
+        byte[] data3 = {8, 8, 6, 9, 1, 7, 2, 2, 2, 5, 5, 5};
+        for (int i = 0; i < data3.length; i++) {
+            assertEquals(addr.origBytes[i], data3[i]);
         }
         addr = CdmaSmsAddress.parse("(650) *253-1000 #600");
         byte[] data4 = {6, 5, 10, 11, 2, 5, 3, 1, 10, 10, 10, 12, 6, 10, 10};
@@ -112,6 +112,14 @@ public class CdmaSmsTest extends AndroidTestCase {
         assertEquals(CdmaSmsAddress.parse("f\u0080oo bar"), null);
         assertEquals(CdmaSmsAddress.parse("f\u1ECFboo\u001fbar"), null);
         assertEquals(CdmaSmsAddress.parse("f\u0080oo bar"), null);
+    }
+
+    @SmallTest
+    public void testRecipientAddress() throws Exception {
+        String pdu = "011a0000001002080d0003100160010610262d5ab500040401448888";
+        SmsMessage sms = SmsMessage.createFromEfRecord(0,
+                HexDump.hexStringToByteArray(pdu));
+        assertEquals("12222", sms.getRecipientAddress());
     }
 
     @SmallTest
@@ -258,6 +266,44 @@ public class CdmaSmsTest extends AndroidTestCase {
         revBearerData = BearerData.decode(BearerData.encode(bearerData));
         assertEquals(userData.payloadStr, revBearerData.userData.payloadStr);
         userData.payloadStr = "";
+        revBearerData = BearerData.decode(BearerData.encode(bearerData));
+        assertEquals(userData.payloadStr, revBearerData.userData.payloadStr);
+    }
+
+    @SmallTest
+    public void testUserData7BitAsciiFeedback() throws Exception {
+        BearerData bearerData = new BearerData();
+        bearerData.messageType = BearerData.MESSAGE_TYPE_DELIVER;
+        bearerData.messageId = 0;
+        bearerData.hasUserDataHeader = false;
+        UserData userData = new UserData();
+        userData.payloadStr = "Test standard SMS";
+        userData.msgEncoding = UserData.ENCODING_7BIT_ASCII;
+        userData.msgEncodingSet = true;
+        bearerData.userData = userData;
+        byte[] encodedSms = BearerData.encode(bearerData);
+
+        BearerData revBearerData = BearerData.decode(encodedSms);
+        assertEquals(userData.msgEncoding, revBearerData.userData.msgEncoding);
+        assertEquals(userData.payloadStr.length(), revBearerData.userData.numFields);
+        assertEquals(userData.payloadStr, revBearerData.userData.payloadStr);
+
+        userData.payloadStr = "1234567";
+        revBearerData = BearerData.decode(BearerData.encode(bearerData));
+        assertEquals(userData.payloadStr, revBearerData.userData.payloadStr);
+        userData.payloadStr = "";
+        revBearerData = BearerData.decode(BearerData.encode(bearerData));
+        assertEquals(userData.payloadStr, revBearerData.userData.payloadStr);
+        userData.payloadStr = "12345678901234567890123456789012345678901234567890" +
+                "12345678901234567890123456789012345678901234567890" +
+                "12345678901234567890123456789012345678901234567890" +
+                "1234567890";
+        revBearerData = BearerData.decode(BearerData.encode(bearerData));
+        assertEquals(userData.payloadStr, revBearerData.userData.payloadStr);
+        userData.payloadStr = "Test \u007f illegal \u0000 SMS chars";
+        revBearerData = BearerData.decode(BearerData.encode(bearerData));
+        assertEquals("Test   illegal   SMS chars", revBearerData.userData.payloadStr);
+        userData.payloadStr = "More @ testing\nis great^|^~woohoo";
         revBearerData = BearerData.decode(BearerData.encode(bearerData));
         assertEquals(userData.payloadStr, revBearerData.userData.payloadStr);
     }
@@ -987,4 +1033,31 @@ public class CdmaSmsTest extends AndroidTestCase {
             }
         }
     }
+
+    @SmallTest
+    public void testCdmaSmsAddressDigitalMode() throws Exception {
+        String str_test;
+        CdmaSmsAddress sms_addr;
+
+        str_test = "+00123456789";
+        sms_addr = CdmaSmsAddress.parse(str_test);
+        assertEquals(CdmaSmsAddress.DIGIT_MODE_4BIT_DTMF, sms_addr.digitMode);
+
+        str_test = "test@test.com";
+        sms_addr = CdmaSmsAddress.parse(str_test);
+        assertEquals(CdmaSmsAddress.DIGIT_MODE_8BIT_CHAR, sms_addr.digitMode);
+
+        str_test = "123456789";
+        sms_addr = CdmaSmsAddress.parse(str_test);
+        assertEquals(CdmaSmsAddress.DIGIT_MODE_4BIT_DTMF, sms_addr.digitMode);
+
+        str_test = "test_123@test.com";
+        sms_addr = CdmaSmsAddress.parse(str_test);
+        assertEquals(CdmaSmsAddress.DIGIT_MODE_8BIT_CHAR, sms_addr.digitMode);
+
+        str_test = " \t";
+        sms_addr = CdmaSmsAddress.parse(str_test);
+        assertEquals(CdmaSmsAddress.DIGIT_MODE_8BIT_CHAR, sms_addr.digitMode);
+    }
+
 }

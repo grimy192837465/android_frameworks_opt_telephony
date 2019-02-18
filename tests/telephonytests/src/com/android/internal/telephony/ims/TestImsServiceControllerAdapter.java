@@ -16,18 +16,21 @@
 
 package com.android.internal.telephony.ims;
 
+import android.app.PendingIntent;
+import android.os.Message;
 import android.os.RemoteException;
-import android.telephony.ims.aidl.IImsConfig;
-import android.telephony.ims.aidl.IImsMmTelFeature;
-import android.telephony.ims.aidl.IImsRcsFeature;
-import android.telephony.ims.aidl.IImsRegistration;
-import android.telephony.ims.aidl.IImsServiceController;
-import android.telephony.ims.aidl.IImsServiceControllerListener;
-import android.telephony.ims.stub.ImsConfigImplBase;
-import android.telephony.ims.stub.ImsFeatureConfiguration;
-import android.telephony.ims.stub.ImsRegistrationImplBase;
+import android.telephony.ims.feature.ImsFeature;
 
+import com.android.ims.ImsCallProfile;
+import com.android.ims.internal.IImsCallSession;
+import com.android.ims.internal.IImsCallSessionListener;
+import com.android.ims.internal.IImsConfig;
+import com.android.ims.internal.IImsEcbm;
 import com.android.ims.internal.IImsFeatureStatusCallback;
+import com.android.ims.internal.IImsMultiEndpoint;
+import com.android.ims.internal.IImsRegistrationListener;
+import com.android.ims.internal.IImsServiceController;
+import com.android.ims.internal.IImsUt;
 
 import static org.mockito.Mockito.spy;
 
@@ -42,53 +45,115 @@ public class TestImsServiceControllerAdapter {
     public class ImsServiceControllerBinder extends IImsServiceController.Stub {
 
         @Override
-        public void setListener(IImsServiceControllerListener l) {
-        }
-
-        @Override
-        public IImsMmTelFeature createMmTelFeature(int slotId, IImsFeatureStatusCallback c) {
-            return TestImsServiceControllerAdapter.this.createMMTelFeature(slotId);
-        }
-
-        @Override
-        public IImsRcsFeature createRcsFeature(int slotId, IImsFeatureStatusCallback c) {
-            return TestImsServiceControllerAdapter.this.createRcsFeature(slotId);
-        }
-
-        @Override
-        public void removeImsFeature(int slotId, int featureType, IImsFeatureStatusCallback c)
+        public void createImsFeature(int slotId, int feature, IImsFeatureStatusCallback c)
                 throws RemoteException {
-            TestImsServiceControllerAdapter.this.removeImsFeature(slotId, featureType);
+            TestImsServiceControllerAdapter.this.createImsFeature(slotId, feature);
+            mStatusCallback = c;
         }
 
         @Override
-        public ImsFeatureConfiguration querySupportedImsFeatures() {
+        public void removeImsFeature(int slotId, int feature, IImsFeatureStatusCallback c)
+                throws RemoteException {
+            TestImsServiceControllerAdapter.this.removeImsFeature(slotId, feature);
+        }
+
+        @Override
+        public int startSession(int slotId, int featureType, PendingIntent incomingCallIntent,
+                IImsRegistrationListener listener) throws RemoteException {
+            return 0;
+        }
+
+        @Override
+        public void endSession(int slotId, int featureType, int sessionId) throws RemoteException {
+
+        }
+
+        @Override
+        public boolean isConnected(int slotId, int featureType, int callSessionType, int callType)
+                throws RemoteException {
+            return false;
+        }
+
+        @Override
+        public boolean isOpened(int slotId, int featureType) throws RemoteException {
+            return false;
+        }
+
+        @Override
+        public int getFeatureStatus(int slotId, int featureType) throws RemoteException {
+            return ImsFeature.STATE_NOT_AVAILABLE;
+        }
+
+        @Override
+        public void addRegistrationListener(int slotId, int featureType,
+                IImsRegistrationListener listener) throws RemoteException {
+
+        }
+
+        @Override
+        public void removeRegistrationListener(int slotId, int featureType,
+                IImsRegistrationListener listener) throws RemoteException {
+
+        }
+
+        @Override
+        public ImsCallProfile createCallProfile(int slotId, int featureType, int sessionId,
+                int callSessionType, int callType) throws RemoteException {
             return null;
         }
 
         @Override
-        public void notifyImsServiceReadyForFeatureCreation() {
+        public IImsCallSession createCallSession(int slotId, int featureType, int sessionId,
+                ImsCallProfile profile, IImsCallSessionListener listener) throws RemoteException {
+            return null;
         }
 
         @Override
-        public IImsConfig getConfig(int slotId) throws RemoteException {
-            return new ImsConfigImplBase().getIImsConfig();
+        public IImsCallSession getPendingCallSession(int slotId, int featureType, int sessionId,
+                String callId) throws RemoteException {
+            return null;
         }
 
         @Override
-        public IImsRegistration getRegistration(int slotId) throws RemoteException {
-            return new ImsRegistrationImplBase().getBinder();
+        public IImsUt getUtInterface(int slotId, int featureType)
+                throws RemoteException {
+            return null;
         }
 
         @Override
-        public void enableIms(int slotId) {
+        public IImsConfig getConfigInterface(int slotId, int featureType)
+                throws RemoteException {
+            return null;
         }
 
         @Override
-        public void disableIms(int slotId) {
+        public void turnOnIms(int slotId, int featureType)
+                throws RemoteException {
 
         }
 
+        @Override
+        public void turnOffIms(int slotId, int featureType) throws RemoteException {
+
+        }
+
+        @Override
+        public IImsEcbm getEcbmInterface(int slotId, int featureType)
+                throws RemoteException {
+            return null;
+        }
+
+        @Override
+        public void setUiTTYMode(int slotId, int featureType, int uiTtyMode, Message onComplete)
+                throws RemoteException {
+
+        }
+
+        @Override
+        public IImsMultiEndpoint getMultiEndpointInterface(int slotId, int featureType)
+                throws RemoteException {
+            return null;
+        }
     }
 
     private ImsServiceControllerBinder mBinder;
@@ -102,13 +167,7 @@ public class TestImsServiceControllerAdapter {
     }
 
     // Used by Mockito for verification that this method is being called in spy
-    public IImsMmTelFeature createMMTelFeature(int slotId) {
-        return null;
-    }
-
-    // Used by Mockito for verification that this method is being called in spy
-    public IImsRcsFeature createRcsFeature(int slotId) {
-        return null;
+    public void createImsFeature(int subId, int feature) throws RemoteException {
     }
 
     // Used by Mockito for verification that this method is being called in spy

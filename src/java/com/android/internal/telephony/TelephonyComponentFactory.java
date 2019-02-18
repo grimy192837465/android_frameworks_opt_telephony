@@ -22,7 +22,6 @@ import android.os.Handler;
 import android.os.IDeviceIdleController;
 import android.os.Looper;
 import android.os.ServiceManager;
-import android.telephony.AccessNetworkConstants.TransportType;
 import android.telephony.Rlog;
 
 import com.android.internal.telephony.cdma.CdmaSubscriptionSourceManager;
@@ -31,10 +30,8 @@ import com.android.internal.telephony.dataconnection.DcTracker;
 import com.android.internal.telephony.imsphone.ImsExternalCallTracker;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneCallTracker;
-import com.android.internal.telephony.SubscriptionController;
-import com.android.internal.telephony.uicc.IccCardStatus;
-import com.android.internal.telephony.uicc.UiccCard;
-import com.android.internal.telephony.uicc.UiccProfile;
+import com.android.internal.telephony.uicc.IccCardProxy;
+import com.android.internal.os.BackgroundThread;
 
 import dalvik.system.PathClassLoader;
 
@@ -47,6 +44,7 @@ import java.lang.reflect.Constructor;
  */
 public class TelephonyComponentFactory {
     protected static String LOG_TAG = "TelephonyComponentFactory";
+
     private static TelephonyComponentFactory sInstance;
 
     public static TelephonyComponentFactory getInstance() {
@@ -62,9 +60,11 @@ public class TelephonyComponentFactory {
                 sInstance = (TelephonyComponentFactory) custMethod.newInstance();
                 Rlog.i(LOG_TAG, "Using QtiTelephonyComponentFactory");
             } catch (NoClassDefFoundError | ClassNotFoundException e) {
+                //e.printStackTrace();
                 Rlog.e(LOG_TAG, "QtiTelephonyComponentFactory not used - fallback to default");
                 sInstance = new TelephonyComponentFactory();
-            } catch (Exception e) {
+            } catch (Exception  e) {
+                e.printStackTrace();
                 Rlog.e(LOG_TAG, "Error loading QtiTelephonyComponentFactory - fallback to default");
                 sInstance = new TelephonyComponentFactory();
             }
@@ -92,20 +92,13 @@ public class TelephonyComponentFactory {
         return new ServiceStateTracker(phone, ci);
     }
 
-    /**
-     * Returns a new {@link NitzStateMachine} instance.
-     */
-    public NitzStateMachine makeNitzStateMachine(GsmCdmaPhone phone) {
-        return new NitzStateMachine(phone);
-    }
-
     public SimActivationTracker makeSimActivationTracker(Phone phone) {
         return new SimActivationTracker(phone);
     }
 
     public DcTracker makeDcTracker(Phone phone) {
         Rlog.d(LOG_TAG, "makeDcTracker");
-        return new DcTracker(phone, TransportType.WWAN);
+        return new DcTracker(phone);
     }
 
     public CarrierSignalAgent makeCarrierSignalAgent(Phone phone) {
@@ -114,10 +107,6 @@ public class TelephonyComponentFactory {
 
     public CarrierActionAgent makeCarrierActionAgent(Phone phone) {
         return new CarrierActionAgent(phone);
-    }
-
-    public CarrierIdentifier makeCarrierIdentifier(Phone phone) {
-        return new CarrierIdentifier(phone);
     }
 
     public IccPhoneBookInterfaceManager makeIccPhoneBookInterfaceManager(Phone phone) {
@@ -130,12 +119,9 @@ public class TelephonyComponentFactory {
         return new IccSmsInterfaceManager(phone);
     }
 
-    /**
-     * Create a new UiccProfile object.
-     */
-    public UiccProfile makeUiccProfile(Context context, CommandsInterface ci, IccCardStatus ics,
-                                       int phoneId, UiccCard uiccCard, Object lock) {
-        return new UiccProfile(context, ci, ics, phoneId, uiccCard, lock);
+    public IccCardProxy makeIccCardProxy(Context context, CommandsInterface ci, int phoneId) {
+        Rlog.d(LOG_TAG, "makeIccCardProxy");
+        return new IccCardProxy(context, ci, phoneId);
     }
 
     public EriManager makeEriManager(Phone phone, Context context, int eriFileSource) {
@@ -174,7 +160,6 @@ public class TelephonyComponentFactory {
      * Create a tracker from a row of raw table
      */
     public InboundSmsTracker makeInboundSmsTracker(Cursor cursor, boolean isCurrentFormat3gpp2) {
-        Rlog.d(LOG_TAG, "makeInboundSmsTracker");
         return new InboundSmsTracker(cursor, isCurrentFormat3gpp2);
     }
 
@@ -216,13 +201,30 @@ public class TelephonyComponentFactory {
             int phoneId, int precisePhoneType,
             TelephonyComponentFactory telephonyComponentFactory) {
         Rlog.d(LOG_TAG, "makePhone");
-        return new GsmCdmaPhone(context, ci, notifier, phoneId, precisePhoneType,
+        Phone phone = null;
+        if (precisePhoneType == PhoneConstants.PHONE_TYPE_GSM) {
+            phone = new GsmCdmaPhone(context,
+                ci, notifier, phoneId,
+                PhoneConstants.PHONE_TYPE_GSM,
                 telephonyComponentFactory);
+        } else if (precisePhoneType == PhoneConstants.PHONE_TYPE_CDMA) {
+                phone = new GsmCdmaPhone(context,
+                ci, notifier, phoneId,
+                PhoneConstants.PHONE_TYPE_CDMA_LTE,
+                telephonyComponentFactory);
+        }
+        return phone;
     }
 
     public SubscriptionController initSubscriptionController(Context c, CommandsInterface[] ci) {
         Rlog.d(LOG_TAG, "initSubscriptionController");
         return SubscriptionController.init(c, ci);
+    }
+
+    public SubscriptionInfoUpdater makeSubscriptionInfoUpdater(Context context, Phone[] phones,
+            CommandsInterface[] ci) {
+        Rlog.d(LOG_TAG, "makeSubscriptionInfoUpdater");
+        return new SubscriptionInfoUpdater(BackgroundThread.get().getLooper(), context, phones, ci);
     }
 
     public SubscriptionInfoUpdater makeSubscriptionInfoUpdater(Looper looper, Context context,
@@ -251,7 +253,4 @@ public class TelephonyComponentFactory {
         return new RIL(context, preferredNetworkType, cdmaSubscription, instanceId);
     }
 
-    public LocaleTracker makeLocaleTracker(Phone phone, Looper looper) {
-        return new LocaleTracker(phone, looper);
-    }
 }

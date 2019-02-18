@@ -28,6 +28,7 @@ import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.AsyncResult;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -48,16 +49,14 @@ import android.telephony.CellLocation;
 import android.telephony.ClientRequestStats;
 import android.telephony.ImsiEncryptionInfo;
 import android.telephony.PhoneStateListener;
-import android.telephony.PhysicalChannelConfig;
 import android.telephony.RadioAccessFamily;
 import android.telephony.Rlog;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.SubscriptionManager;
-import android.telephony.TelephonyManager;
 import android.telephony.VoLteServiceState;
-import android.telephony.ims.stub.ImsRegistrationImplBase;
 import android.text.TextUtils;
+import android.util.Log;
 
 import com.android.ims.ImsCall;
 import com.android.ims.ImsConfig;
@@ -71,6 +70,7 @@ import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
 import com.android.internal.telephony.uicc.IccFileHandler;
 import com.android.internal.telephony.uicc.IccRecords;
 import com.android.internal.telephony.uicc.IsimRecords;
+import com.android.internal.telephony.uicc.SIMRecords;
 import com.android.internal.telephony.uicc.UiccCard;
 import com.android.internal.telephony.uicc.UiccCardApplication;
 import com.android.internal.telephony.uicc.UiccController;
@@ -122,10 +122,16 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
                 if (intent.getAction().equals(ImsManager.ACTION_IMS_SERVICE_UP)) {
                     mImsServiceReady = true;
                     updateImsPhone();
-                    ImsManager.getInstance(mContext, mPhoneId).updateImsServiceConfig(false);
+                    if (mImsMgr != null) {
+                        mImsMgr.updateImsServiceConfigForSlot(false);
+                    }
                 } else if (intent.getAction().equals(ImsManager.ACTION_IMS_SERVICE_DOWN)) {
                     mImsServiceReady = false;
                     updateImsPhone();
+                } else if (intent.getAction().equals(ImsConfig.ACTION_IMS_CONFIG_CHANGED)) {
+                    int item = intent.getIntExtra(ImsConfig.EXTRA_CHANGED_ITEM, -1);
+                    String value = intent.getStringExtra(ImsConfig.EXTRA_NEW_VALUE);
+                    ImsManager.onProvisionedValueChanged(context, item, value);
                 }
             }
         }
@@ -216,6 +222,9 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
     // Key used to read/write the ID for storing the voice mail
     private static final String VM_ID = "vm_id_key";
 
+    // Key used to read/write if Video Call Forwarding is enabled
+    public static final String CF_ENABLED_VIDEO = "cf_enabled_key_video";
+
     // Key used for storing call forwarding status
     public static final String CF_STATUS = "cf_status_key";
     // Key used to read/write the ID for storing the call forwarding status
@@ -274,11 +283,11 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
     public SmsUsageMonitor mSmsUsageMonitor;
     protected AtomicReference<UiccCardApplication> mUiccApplication =
             new AtomicReference<UiccCardApplication>();
-    TelephonyTester mTelephonyTester;
+
+    private TelephonyTester mTelephonyTester;
     private String mName;
     private final String mActionDetached;
     private final String mActionAttached;
-    protected DeviceStateMonitor mDeviceStateMonitor;
 
     protected int mPhoneId;
 
@@ -364,6 +373,8 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
 
     private boolean mUnitTestMode;
 
+    private ImsManager mImsMgr = null;
+
     public IccRecords getIccRecords() {
         return mIccRecords.get();
     }
@@ -411,24 +422,14 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
     }
 
     /**
-     * Set a system property for the current phone, unless we're in unit test mode
+     * Set a system property, unless we're in unit test mode
      */
     // CAF_MSIM TODO this need to be replated with TelephonyManager API ?
     public void setSystemProperty(String property, String value) {
-        if (getUnitTestMode()) {
+        if(getUnitTestMode()) {
             return;
         }
-        TelephonyManager.setTelephonyProperty(mPhoneId, property, value);
-    }
-
-    /**
-     * Set a system property for all phones, unless we're in unit test mode
-     */
-    public void setGlobalSystemProperty(String property, String value) {
-        if (getUnitTestMode()) {
-            return;
-        }
-        TelephonyManager.setTelephonyProperty(property, value);
+        SystemProperties.set(property, value);
     }
 
     /**
@@ -536,7 +537,7 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
                 // note this is not persisting
                 WifiManager wM = (WifiManager)
                         mContext.getSystemService(Context.WIFI_SERVICE);
-                wM.setCountryCode(country);
+                wM.setCountryCode(country, false);
             }
         }
 
@@ -566,21 +567,22 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
 
         synchronized(Phone.lockForRadioTechnologyChange) {
             IntentFilter filter = new IntentFilter();
-            ImsManager imsManager = ImsManager.getInstance(mContext, getPhoneId());
+            mImsMgr = ImsManager.getInstance(mContext, getPhoneId());
             // Don't listen to deprecated intents using the new dynamic binding.
-            if (imsManager != null && !imsManager.isDynamicBinding()) {
+            if (mImsMgr != null && !mImsMgr.isDynamicBinding()) {
                 filter.addAction(ImsManager.ACTION_IMS_SERVICE_UP);
                 filter.addAction(ImsManager.ACTION_IMS_SERVICE_DOWN);
             }
+            filter.addAction(ImsConfig.ACTION_IMS_CONFIG_CHANGED);
             mContext.registerReceiver(mImsIntentReceiver, filter);
 
             // Monitor IMS service - but first poll to see if already up (could miss
             // intent). Also, when using new ImsResolver APIs, the service will be available soon,
             // so start trying to bind.
-            if (imsManager != null) {
+            if (mImsMgr != null) {
                 // If it is dynamic binding, kick off ImsPhone creation now instead of waiting for
                 // the service to be available.
-                if (imsManager.isDynamicBinding() || imsManager.isServiceAvailable()) {
+                if (mImsMgr.isDynamicBinding() || mImsMgr.isServiceAvailable()) {
                     mImsServiceReady = true;
                     updateImsPhone();
                 }
@@ -669,7 +671,7 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
                     String dialString = (String) ar.result;
                     if (TextUtils.isEmpty(dialString)) return;
                     try {
-                        dialInternal(dialString, new DialArgs.Builder().build());
+                        dialInternal(dialString, null, VideoProfile.STATE_AUDIO_ONLY, null);
                     } catch (CallStateException e) {
                         Rlog.e(LOG_TAG, "silent redial failed: " + e);
                     }
@@ -1357,7 +1359,7 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
      * automatic selection, all depending upon the value in the shared
      * preferences.
      */
-    private void restoreSavedNetworkSelection(Message response) {
+    protected void restoreSavedNetworkSelection(Message response) {
         // retrieve the operator
         OperatorInfo networkSelection = getSavedNetworkSelection();
 
@@ -1420,6 +1422,8 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
      */
     public void registerForServiceStateChanged(
             Handler h, int what, Object obj) {
+        checkCorrectThread(h);
+
         mServiceStateRegistrants.add(h, what, obj);
     }
 
@@ -1847,7 +1851,30 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
         Rlog.v(LOG_TAG, "getCallForwardingIndicator: iccForwardingFlag=" + (r != null
                     ? r.getVoiceCallForwardingFlag() : "null") + ", sharedPrefFlag="
                     + getCallForwardingIndicatorFromSharedPref());
-        return (callForwardingIndicator == IccRecords.CALL_FORWARDING_STATUS_ENABLED);
+        return ((callForwardingIndicator == IccRecords.CALL_FORWARDING_STATUS_ENABLED) ||
+                getVideoCallForwardingPreference());
+    }
+
+    /**
+     * This method stores the CF_ENABLED_VIDEO flag in preferences
+     * @param enabled
+     */
+    public void setVideoCallForwardingPreference(boolean enabled) {
+        Rlog.d(LOG_TAG, "Set video call forwarding info to preferences enabled = " + enabled);
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(mContext);
+        SharedPreferences.Editor edit = sp.edit();
+        edit.putBoolean(CF_ENABLED_VIDEO + getSubId(), enabled);
+        edit.commit();
+    }
+
+    /**
+     * This method gets Video Call Forwarding enabled/disabled from preferences
+     */
+    public boolean getVideoCallForwardingPreference() {
+        Rlog.d(LOG_TAG, "Get video call forwarding info from preferences");
+
+        SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(mContext);
+        return sp.getBoolean(CF_ENABLED_VIDEO + getSubId(), false);
     }
 
     public CarrierSignalAgent getCarrierSignalAgent() {
@@ -2181,21 +2208,12 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
         mNotifier.notifyDataActivationStateChanged(this, state);
     }
 
-    public void notifyUserMobileDataStateChanged(boolean state) {
-        mNotifier.notifyUserMobileDataStateChanged(this, state);
-    }
-
     public void notifySignalStrength() {
         mNotifier.notifySignalStrength(this);
     }
 
     public void notifyCellInfo(List<CellInfo> cellInfo) {
         mNotifier.notifyCellInfo(this, privatizeCellInfoList(cellInfo));
-    }
-
-    /** Notify {@link PhysicalChannelConfig} changes. */
-    public void notifyPhysicalChannelConfiguration(List<PhysicalChannelConfig> configs) {
-        mNotifier.notifyPhysicalChannelConfiguration(this, configs);
     }
 
     public void notifyVoLteServiceStateChanged(VoLteServiceState lteState) {
@@ -2225,7 +2243,7 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
     }
 
     public void setIsInEcm(boolean isInEcm) {
-        setGlobalSystemProperty(TelephonyProperties.PROPERTY_INECM_MODE, String.valueOf(isInEcm));
+        setSystemProperty(TelephonyProperties.PROPERTY_INECM_MODE, String.valueOf(isInEcm));
         mIsPhoneInEcmState = isInEcm;
     }
 
@@ -2410,6 +2428,34 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
      */
     public String getCdmaPrlVersion(){
         return null;
+    }
+
+    /**
+     * Initiate to add a participant in an IMS call.
+     * This happens asynchronously, so you cannot assume the audio path is
+     * connected (or a call index has been assigned) until PhoneStateChanged
+     * notification has occurred.
+     *
+     * @exception CallStateException if a new outgoing call is not currently
+     *                possible because no more call slots exist or a call exists
+     *                that is dialing, alerting, ringing, or waiting. Other
+     *                errors are handled asynchronously.
+     */
+    public void addParticipant(String dialString) throws CallStateException {
+        // To be overridden by GsmCdmaPhone and ImsPhone.
+        throw new CallStateException("addParticipant :: No-Op base implementation. "
+                + this);
+    }
+
+    /**
+     * Initiate to add a participant in an IMS call.
+     *
+     * @exception CallStateException operation is not supported.
+     */
+    public void addParticipant(String dialString, Message onComplete) throws CallStateException {
+        // To be overridden by GsmCdmaPhone and ImsPhone.
+        throw new CallStateException("addParticipant :: No-Op base implementation. "
+                + this);
     }
 
     /**
@@ -2947,13 +2993,6 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
     }
 
     /**
-     * Retrieves the EF_PNN from the UICC For GSM/UMTS phones.
-     */
-    public String getPlmn() {
-        return null;
-    }
-
-    /**
      * Get the current for the default apn DataState. No change notification
      * exists at this interface -- use
      * {@link android.telephony.PhoneStateListener} instead.
@@ -3058,27 +3097,6 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
         return;
     }
 
-    public int getCarrierId() {
-        return TelephonyManager.UNKNOWN_CARRIER_ID;
-    }
-
-    public String getCarrierName() {
-        return null;
-    }
-
-    public int getCarrierIdListVersion() {
-        return TelephonyManager.UNKNOWN_CARRIER_ID_LIST_VERSION;
-    }
-
-    /**
-     *  Resets the Carrier Keys in the database. This involves 2 steps:
-     *  1. Delete the keys from the database.
-     *  2. Send an intent to download new Certificates.
-     */
-    public void resetCarrierKeysForImsiEncryption() {
-        return;
-    }
-
     /**
      * Return if UT capability of ImsPhone is enabled or not
      */
@@ -3118,11 +3136,14 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
      * Dials a number.
      *
      * @param dialString The number to dial.
-     * @param dialArgs Parameters to dial with.
+     * @param uusInfo The UUSInfo.
+     * @param videoState The video state for the call.
+     * @param intentExtras Extras from the original CALL intent.
      * @return The Connection.
      * @throws CallStateException
      */
-    protected Connection dialInternal(String dialString, DialArgs dialArgs)
+    protected Connection dialInternal(
+            String dialString, UUSInfo uusInfo, int videoState, Bundle intentExtras)
             throws CallStateException {
         // dialInternal shall be overriden by GsmCdmaPhone
         return null;
@@ -3261,20 +3282,6 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
         return isVolteEnabled;
     }
 
-    /**
-     * @return the IMS MmTel Registration technology for this Phone, defined in
-     * {@link ImsRegistrationImplBase}.
-     */
-    public int getImsRegistrationTech() {
-        Phone imsPhone = mImsPhone;
-        int regTech = ImsRegistrationImplBase.REGISTRATION_TECH_NONE;
-        if (imsPhone != null) {
-            regTech = imsPhone.getImsRegistrationTech();
-        }
-        Rlog.d(LOG_TAG, "getImsRegistrationTechnology =" + regTech);
-        return regTech;
-    }
-
     private boolean getRoamingOverrideHelper(String prefix, String key) {
         String iccId = getIccSerialNumber();
         if (TextUtils.isEmpty(iccId) || TextUtils.isEmpty(key)) {
@@ -3371,9 +3378,7 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
         mRadioCapability.set(rc);
 
         if (SubscriptionManager.isValidSubscriptionId(getSubId())) {
-            boolean restoreSelection = !mContext.getResources().getBoolean(
-                    com.android.internal.R.bool.skip_restoring_network_selection);
-            sendSubscriptionSettings(restoreSelection);
+            sendSubscriptionSettings(true);
         }
     }
 
@@ -3421,11 +3426,17 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
      * @return {@code true} if IMS calling is enabled.
      */
     public boolean isImsUseEnabled() {
-        ImsManager imsManager = ImsManager.getInstance(mContext, mPhoneId);
-        boolean imsUseEnabled = ((imsManager.isVolteEnabledByPlatform()
-                && imsManager.isEnhanced4gLteModeSettingEnabledByUser())
-                || (imsManager.isWfcEnabledByPlatform() && imsManager.isWfcEnabledByUser())
-                && imsManager.isNonTtyOrTtyOnVolteEnabled());
+
+        if (mImsMgr == null) {
+            return false;
+        }
+
+        boolean imsUseEnabled =
+                ((mImsMgr.isVolteEnabledByPlatformForSlot() &&
+                mImsMgr.isEnhanced4gLteModeSettingEnabledByUserForSlot()) ||
+                (mImsMgr.isWfcEnabledByPlatformForSlot() &&
+                mImsMgr.isWfcEnabledByUserForSlot()) &&
+                mImsMgr.isNonTtyOrTtyOnVolteEnabledForSlot());
         return imsUseEnabled;
     }
 
@@ -3482,16 +3493,6 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
      */
     public void setAllowedCarriers(List<CarrierIdentifier> carriers, Message response) {
         mCi.setAllowedCarriers(carriers, response);
-    }
-
-    /** Sets the SignalStrength reporting criteria. */
-    public void setSignalStrengthReportingCriteria(int[] thresholds, int ran) {
-        // no-op default implementation
-    }
-
-    /** Sets the SignalStrength reporting criteria. */
-    public void setLinkCapacityReportingCriteria(int[] dlThresholds, int[] ulThresholds, int ran) {
-        // no-op default implementation
     }
 
     /**
@@ -3556,13 +3557,13 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
         return false;
     }
 
-    public static void checkWfcWifiOnlyModeBeforeDial(Phone imsPhone, int phoneId, Context context)
+    public void checkWfcWifiOnlyModeBeforeDial()
             throws CallStateException {
-        if (imsPhone == null || !imsPhone.isWifiCallingEnabled()) {
-            ImsManager imsManager = ImsManager.getInstance(context, phoneId);
-            boolean wfcWiFiOnly = (imsManager.isWfcEnabledByPlatform()
-                    && imsManager.isWfcEnabledByUser() && (imsManager.getWfcMode()
-                    == ImsConfig.WfcModeFeatureValueConstants.WIFI_ONLY));
+        if ((mImsPhone == null || !isWifiCallingEnabled()) && mImsMgr != null) {
+            boolean wfcWiFiOnly = (mImsMgr.isWfcEnabledByPlatformForSlot() &&
+                    mImsMgr.isWfcEnabledByUserForSlot() &&
+                    (mImsMgr.getWfcModeForSlot() ==
+                            ImsConfig.WfcModeFeatureValueConstants.WIFI_ONLY));
             if (wfcWiFiOnly) {
                 throw new CallStateException(
                         CallStateException.ERROR_OUT_OF_SERVICE,
@@ -3648,14 +3649,19 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
         mCi.setSimCardPower(state, null);
     }
 
-    public void setRadioIndicationUpdateMode(int filters, int mode) {
-        if (mDeviceStateMonitor != null) {
-            mDeviceStateMonitor.setIndicationUpdateMode(filters, mode);
-        }
+    @Override
+    public void getCallForwardingOption(int commandInterfaceCFReason,
+            int commandInterfaceServiceClass, Message onComplete) {
     }
 
-    public void setCarrierTestOverride(String mccmnc, String imsi, String iccid, String gid1,
-            String gid2, String pnn, String spn) {
+    @Override
+    public void setCallForwardingOption(int commandInterfaceCFReason,
+            int commandInterfaceCFAction, String dialingNumber,
+            int commandInterfaceServiceClass, int timerSeconds, Message onComplete) {
+    }
+
+    public SIMRecords getSIMRecords() {
+        return null;
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
@@ -3773,12 +3779,6 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
             pw.println("++++++++++++++++++++++++++++++++");
         }
 
-        if (mDeviceStateMonitor != null) {
-            pw.println("DeviceStateMonitor:");
-            mDeviceStateMonitor.dump(fd, pw, args);
-            pw.println("++++++++++++++++++++++++++++++++");
-        }
-
         if (mCi != null && mCi instanceof RIL) {
             try {
                 ((RIL)mCi).dump(fd, pw, args);
@@ -3790,4 +3790,42 @@ public abstract class Phone extends Handler implements PhoneInternalInterface {
             pw.println("++++++++++++++++++++++++++++++++");
         }
     }
+    /** @hide */
+    /** @hide */
+    public void setFactoryModeModemGPIO (int status, int num, Message response) {
+
+    }
+    /** @hide */
+    public boolean is_test_card()
+    {
+        if(mIccRecords != null)
+        {
+            IccRecords mRecords = mIccRecords.get();
+            if(mRecords != null)
+            {
+                return mRecords.is_test_card();
+            }
+            else
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+    }
+ //zhouhanxin@oneplus.cn 2016-10-18 for sim managerment begin.
+    private RegistrantList mPhoneObejectSwitchRegistrants = new RegistrantList();
+    private final Object mLock = new Object();
+    /*@hide*/
+    public void registerForPhoneObjectSwitch(Handler h, int what, Object obj) {
+        synchronized (mLock) {
+            Registrant r = new Registrant (h, what, obj);
+
+            mPhoneObejectSwitchRegistrants.add(r);
+        }
+    }
+
+ //zhouhanxin@oneplus.cn 2016-10-18 for sim managerment end
 }

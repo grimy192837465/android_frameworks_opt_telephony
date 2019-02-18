@@ -34,7 +34,6 @@ import java.util.concurrent.CopyOnWriteArraySet;
  * {@hide}
  */
 public abstract class Connection {
-    private static final String TAG = "Connection";
 
     public interface PostDialListener {
         void onPostDialWait();
@@ -104,10 +103,6 @@ public abstract class Connection {
         public void onConnectionEvent(String event, Bundle extras);
         public void onRttModifyRequestReceived();
         public void onRttModifyResponseReceived(int status);
-        public void onDisconnect(int cause);
-        public void onRttInitiated();
-        public void onRttTerminated();
-        public void onOriginalConnectionReplaced(Connection newConnection);
     }
 
     /**
@@ -147,14 +142,6 @@ public abstract class Connection {
         public void onRttModifyRequestReceived() {}
         @Override
         public void onRttModifyResponseReceived(int status) {}
-        @Override
-        public void onDisconnect(int cause) {}
-        @Override
-        public void onRttInitiated() {}
-        @Override
-        public void onRttTerminated() {}
-        @Override
-        public void onOriginalConnectionReplaced(Connection newConnection) {}
     }
 
     public static final int AUDIO_QUALITY_STANDARD = 1;
@@ -216,6 +203,7 @@ public abstract class Connection {
     private int mPhoneType;
     private boolean mAnsweringDisconnectsActiveCall;
     private boolean mAllowAddCallDuringVideoCall;
+    private boolean mAllowHoldingVideoCall;
 
     /**
      * Used to indicate that this originated from pulling a {@link android.telecom.Connection} with
@@ -497,11 +485,6 @@ public abstract class Connection {
     }
 
     /**
-     * Deflect individual Connection
-     */
-    public abstract void deflect(String number) throws CallStateException;
-
-    /**
      * Hangup individual Connection
      */
     public abstract void hangup() throws CallStateException;
@@ -533,7 +516,7 @@ public abstract class Connection {
         mUserData = null;
     }
 
-    public void addPostDialListener(PostDialListener listener) {
+    public final void addPostDialListener(PostDialListener listener) {
         if (!mPostDialListeners.contains(listener)) {
             mPostDialListeners.add(listener);
         }
@@ -677,7 +660,7 @@ public abstract class Connection {
      *
      * @param listener A listener.
      */
-    public void addListener(Listener listener) {
+    public final void addListener(Listener listener) {
         mListeners.add(listener);
     }
 
@@ -854,16 +837,6 @@ public abstract class Connection {
     public void setConnectionExtras(Bundle extras) {
         if (extras != null) {
             mExtras = new Bundle(extras);
-
-            int previousCount = mExtras.size();
-            // Prevent vendors from passing in extras other than primitive types and android API
-            // parcelables.
-            mExtras = mExtras.filterValues();
-            int filteredCount = mExtras.size();
-            if (filteredCount != previousCount) {
-                Rlog.i(TAG, "setConnectionExtras: filtering " + (previousCount - filteredCount)
-                        + " invalid extras.");
-            }
         } else {
             mExtras = null;
         }
@@ -909,6 +882,13 @@ public abstract class Connection {
         mAllowAddCallDuringVideoCall = allowAddCallDuringVideoCall;
     }
 
+    public boolean shouldAllowHoldingVideoCall() {
+        return mAllowHoldingVideoCall;
+    }
+
+    public void setAllowHoldingVideoCall(boolean allowHoldingVideoCall) {
+        mAllowHoldingVideoCall = allowHoldingVideoCall;
+    }
     /**
      * Sets whether the connection is the result of an external call which was pulled to the local
      * device.
@@ -1025,11 +1005,6 @@ public abstract class Connection {
         }
     }
 
-    public void onOriginalConnectionReplaced(Connection newConnection) {
-        for (Listener l : mListeners) {
-            l.onOriginalConnectionReplaced(newConnection);
-        }
-    }
     /**
      * Notifies the connection that there was a failure while handing over to WIFI.
      */
@@ -1076,34 +1051,23 @@ public abstract class Connection {
         }
     }
 
-    public void onRttInitiated() {
-        for (Listener l : mListeners) {
-            l.onRttInitiated();
-        }
-    }
-
-    public void onRttTerminated() {
-        for (Listener l : mListeners) {
-            l.onRttTerminated();
-        }
-    }
-    /**
-     * Notify interested parties that this connection disconnected.
-     * {@code TelephonyConnection}, for example, uses this.
-     * @param reason the disconnect code, per {@link DisconnectCause}.
-     */
-    protected void notifyDisconnect(int reason) {
-        Rlog.i(TAG, "notifyDisconnect: callId=" + getTelecomCallId() + ", reason=" + reason);
-        for (Listener l : mListeners) {
-            l.onDisconnect(reason);
-        }
-    }
-
     /**
      *
      */
     public int getPhoneType() {
         return mPhoneType;
+    }
+
+    /**
+     * Reset the Connection time and Duration
+     */
+    public void resetConnectionTime() {
+        if (mPhoneType == PhoneConstants.PHONE_TYPE_CDMA_LTE ||
+                mPhoneType == PhoneConstants.PHONE_TYPE_CDMA) {
+            mConnectTime = System.currentTimeMillis();
+            mConnectTimeReal = SystemClock.elapsedRealtime();
+            mDuration = 0;
+        }
     }
 
     /**

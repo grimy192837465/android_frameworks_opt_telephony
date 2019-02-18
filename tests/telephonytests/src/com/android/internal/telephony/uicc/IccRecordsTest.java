@@ -33,14 +33,22 @@ import org.mockito.Mock;
 import static org.mockito.Mockito.*;
 import org.mockito.MockitoAnnotations;
 import org.junit.After;
+import static org.junit.Assert.assertEquals;
 import org.junit.Before;
 import org.junit.Test;
 import com.android.internal.telephony.TelephonyTest;
 
+import com.android.internal.telephony.CommandsInterface;
+import static com.android.internal.telephony.TelephonyTestUtils.waitForMs;
 import android.content.Context;
+import android.os.AsyncResult;
 import android.os.HandlerThread;
+import android.os.Message;
 
 public class IccRecordsTest extends TelephonyTest {
+
+    @Mock
+    private CommandsInterface mMockCI;
 
     private IccRecords mIccRecords;
 
@@ -51,7 +59,7 @@ public class IccRecordsTest extends TelephonyTest {
 
         @Override
         public void onLooperPrepared() {
-            mIccRecords = new SIMRecords(mUiccCardApplication3gpp, mContext, mSimulatedCommands);
+            mIccRecords = new SIMRecords(mUiccCardApplication3gpp, mContext, mMockCI);
             setReady(true);
         }
     }
@@ -59,6 +67,7 @@ public class IccRecordsTest extends TelephonyTest {
     @Before
     public void setUp() throws Exception {
         super.setUp(this.getClass().getSimpleName());
+        mMockCI = mock(CommandsInterface.class);
         new IccRecordsTestHandler(TAG).start();
         waitUntilReady();
     }
@@ -71,13 +80,27 @@ public class IccRecordsTest extends TelephonyTest {
     @Test
     public void testDisposeCallsUnregisterForIccRefresh() {
         // verify called below when IccRecords object is created
-        verify(mSimulatedCommandsVerifier).registerForIccRefresh(eq(mIccRecords),
+        verify(mMockCI).registerForIccRefresh(any(IccRecords.class),
                     eq(IccRecords.EVENT_REFRESH), isNull());
         mIccRecords.dispose();
         // verify called within dispose
-        verify(mSimulatedCommandsVerifier).unregisterForIccRefresh(eq(mIccRecords));
+        verify(mMockCI).unregisterForIccRefresh(any(IccRecords.class));
 
     }
 
+
+    @Test
+    public void testGetSmsCapacityOnIcc() {
+        // set the number of records to 500
+        int[] records = new int[3];
+        records[2] = 500;
+        Message fetchCapacityDone = mIccRecords.obtainMessage(IccRecords.EVENT_GET_SMS_RECORD_SIZE_DONE);
+        AsyncResult.forMessage(fetchCapacityDone, records, null);
+        fetchCapacityDone.sendToTarget();
+
+        // verify whether the count is 500
+        waitForMs(200);
+        assertEquals(mIccRecords.getSmsCapacityOnIcc(), 500);
+    }
 
 }

@@ -17,12 +17,14 @@
 package com.android.internal.telephony.imsphone;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.telephony.ServiceState;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import com.android.ims.ImsCall;
-import android.telephony.ims.ImsCallProfile;
-
+import com.android.ims.ImsCallProfile;
+import com.android.internal.telephony.Call;
 import com.android.internal.telephony.TelephonyTest;
 
 import org.junit.After;

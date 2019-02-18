@@ -45,7 +45,6 @@ public abstract class BaseCommands implements CommandsInterface {
     protected RegistrantList mVoiceRadioTechChangedRegistrants = new RegistrantList();
     protected RegistrantList mImsNetworkStateChangedRegistrants = new RegistrantList();
     protected RegistrantList mIccStatusChangedRegistrants = new RegistrantList();
-    protected RegistrantList mIccSlotStatusChangedRegistrants = new RegistrantList();
     protected RegistrantList mVoicePrivacyOnRegistrants = new RegistrantList();
     protected RegistrantList mVoicePrivacyOffRegistrants = new RegistrantList();
     protected Registrant mUnsolOemHookRawRegistrant;
@@ -75,9 +74,7 @@ public abstract class BaseCommands implements CommandsInterface {
     protected RegistrantList mCarrierInfoForImsiEncryptionRegistrants = new RegistrantList();
     protected RegistrantList mRilNetworkScanResultRegistrants = new RegistrantList();
     protected RegistrantList mModemResetRegistrants = new RegistrantList();
-    protected RegistrantList mNattKeepaliveStatusRegistrants = new RegistrantList();
-    protected RegistrantList mPhysicalChannelConfigurationRegistrants = new RegistrantList();
-    protected RegistrantList mLceInfoRegistrants = new RegistrantList();
+
 
     protected Registrant mGsmSmsRegistrant;
     protected Registrant mCdmaSmsRegistrant;
@@ -98,6 +95,7 @@ public abstract class BaseCommands implements CommandsInterface {
     protected Registrant mGsmBroadcastSmsRegistrant;
     protected Registrant mCatCcAlphaRegistrant;
     protected Registrant mSsRegistrant;
+    protected Registrant mLceInfoRegistrant;
 
     // Preferred network type received from PhoneFactory.
     // This is used when establishing a connection to the
@@ -282,17 +280,6 @@ public abstract class BaseCommands implements CommandsInterface {
     @Override
     public void unregisterForIccStatusChanged(Handler h) {
         mIccStatusChangedRegistrants.remove(h);
-    }
-
-    @Override
-    public void registerForIccSlotStatusChanged(Handler h, int what, Object obj) {
-        Registrant r = new Registrant(h, what, obj);
-        mIccSlotStatusChangedRegistrants.add(r);
-    }
-
-    @Override
-    public void unregisterForIccSlotStatusChanged(Handler h) {
-        mIccSlotStatusChangedRegistrants.remove(h);
     }
 
     @Override
@@ -827,6 +814,9 @@ public abstract class BaseCommands implements CommandsInterface {
         }
     }
 
+    public void sendSMSExpectMore (String smscPDU, String pdu, Message result) {
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -849,17 +839,6 @@ public abstract class BaseCommands implements CommandsInterface {
     }
 
     @Override
-    public void registerForPhysicalChannelConfiguration(Handler h, int what, Object obj) {
-        Registrant r = new Registrant(h, what, obj);
-        mPhysicalChannelConfigurationRegistrants.add(r);
-    }
-
-    @Override
-    public void unregisterForPhysicalChannelConfiguration(Handler h) {
-        mPhysicalChannelConfigurationRegistrants.remove(h);
-    }
-
-    @Override
     public void registerForSrvccStateChanged(Handler h, int what, Object obj) {
         Registrant r = new Registrant (h, what, obj);
 
@@ -879,7 +858,8 @@ public abstract class BaseCommands implements CommandsInterface {
         return mRilVersion;
     }
 
-    public void setUiccSubscription(int appIndex, boolean activate, Message response) {
+    public void setUiccSubscription(int slotId, int appIndex, int subId, int subStatus,
+            Message response) {
     }
 
     public void setDataAllowed(boolean allowed, Message response) {
@@ -922,18 +902,15 @@ public abstract class BaseCommands implements CommandsInterface {
 
     @Override
     public void registerForLceInfo(Handler h, int what, Object obj) {
-        Registrant r = new Registrant(h, what, obj);
-
-        synchronized (mStateMonitor) {
-            mLceInfoRegistrants.add(r);
-        }
+      mLceInfoRegistrant = new Registrant(h, what, obj);
     }
 
     @Override
     public void unregisterForLceInfo(Handler h) {
-        synchronized (mStateMonitor) {
-            mLceInfoRegistrants.remove(h);
-        }
+      if (mLceInfoRegistrant != null && mLceInfoRegistrant.getHandler() == h) {
+          mLceInfoRegistrant.clear();
+          mLceInfoRegistrant = null;
+      }
     }
 
     @Override
@@ -957,6 +934,29 @@ public abstract class BaseCommands implements CommandsInterface {
     }
 
     @Override
+    public void iccOpenLogicalChannel(String AID, int p2, Message response) {
+    }
+
+    @Override
+    public void iccCloseLogicalChannel(int channel, Message response) {
+    }
+
+    @Override
+    public void iccTransmitApduLogicalChannel(int channel, int cla, int instruction,
+                                              int p1, int p2, int p3, String data,
+                                              Message response) {
+    }
+
+    @Override
+    public void iccTransmitApduBasicChannel(int cla, int instruction, int p1, int p2,
+                                            int p3, String data, Message response) {
+    }
+
+    @Override
+    public void getAtr(Message response) {
+    }
+
+    @Override
     public void registerForCarrierInfoForImsiEncryption(Handler h, int what, Object obj) {
         mCarrierInfoForImsiEncryptionRegistrants.add(new Registrant(h, what, obj));
     }
@@ -964,21 +964,5 @@ public abstract class BaseCommands implements CommandsInterface {
     @Override
     public void unregisterForCarrierInfoForImsiEncryption(Handler h) {
         mCarrierInfoForImsiEncryptionRegistrants.remove(h);
-    }
-
-    @Override
-    public void registerForNattKeepaliveStatus(Handler h, int what, Object obj) {
-        Registrant r = new Registrant(h, what, obj);
-
-        synchronized (mStateMonitor) {
-            mNattKeepaliveStatusRegistrants.add(r);
-        }
-    }
-
-    @Override
-    public void unregisterForNattKeepaliveStatus(Handler h) {
-        synchronized (mStateMonitor) {
-            mNattKeepaliveStatusRegistrants.remove(h);
-        }
     }
 }

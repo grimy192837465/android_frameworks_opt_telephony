@@ -19,8 +19,8 @@ package com.android.internal.telephony;
 import android.content.ContentValues;
 import android.content.pm.PackageManager;
 import android.os.AsyncResult;
-import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.telephony.Rlog;
@@ -96,7 +96,7 @@ public class IccPhoneBookInterfaceManager {
                 case EVENT_UPDATE_DONE:
                     ar = (AsyncResult) msg.obj;
                     if (ar.exception != null) {
-                        if(DBG) logd("exception of EVENT_UPDATE_DONE is" + ar.exception);
+                        if(DBG) logd("exception of EVENT_UPDATE_DONE is" + ar.exception );
                     }
                     synchronized (mLock) {
                         mSuccess = (ar.exception == null);
@@ -255,8 +255,9 @@ public class IccPhoneBookInterfaceManager {
         String[] newAnrArray = TextUtils.isEmpty(newAnr) ? null : getAnrStringArray(newAnr);
         efid = updateEfForIccType(efid);
 
-        if (DBG) logd("updateAdnRecordsWithContentValuesInEfBySearch: efid=" + efid +
-                ", values = " + values + ", pin2=" + pin2);
+        if (DBG)
+            logd("updateAdnRecordsWithContentValuesInEfBySearch: efid=" + efid + ", values = " +
+                values + ", pin2=" + pin2);
         synchronized (mLock) {
             checkThread();
             mSuccess = false;
@@ -448,7 +449,7 @@ public class IccPhoneBookInterfaceManager {
      *            capacity[9]  is the max length of anr
      */
     public int[] getAdnRecordsCapacity() {
-        if (DBG) logd("getAdnRecordsCapacity");
+        if (DBG) logd("getAdnRecordsCapacity" );
         int capacity[] = new int[10];
 
         return capacity;
